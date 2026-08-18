@@ -1,0 +1,5 @@
+# dsh-tool-session 插件的 cordis patch 层：把本插件插入宿主组合。
+- insert:
+    - id: tool-session
+      name: dsh-tool-session
+      config: {}
