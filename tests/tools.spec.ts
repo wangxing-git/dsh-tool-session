@@ -41,9 +41,12 @@ function noSandbox(): SessionSandboxController {
   return new SessionSandboxController({ fs: { sandboxMode: undefined }, get: () => undefined } as any)
 }
 
-/** 标准 deps（可选服务均缺失）；可选注入 workspaceRegistry（归档成功用例）。 */
+/** 默认模型 stub：create_session / 命令创建会话时需要 seed 路由（provider/model）。 */
+const FAKE_DEFAULT_MODEL = { currentSelection: () => ({ provider: 'deepseek', model: 'test-model' }) }
+
+/** 标准 deps（可选服务均缺失）；可选注入 workspaceRegistry（归档成功用例）与 agentDefaultModel。 */
 function makeDeps(switchIntent = new SwitchIntent(), workspaceRegistry?: ToolDeps['workspaceRegistry'], agentDefaultModel?: ToolDeps['agentDefaultModel']): ToolDeps {
-  return { sessionTitle: () => undefined, workspaceRegistry: workspaceRegistry ?? (() => undefined), agentDefaultModel: agentDefaultModel ?? (() => undefined), switchIntent }
+  return { sessionTitle: () => undefined, workspaceRegistry: workspaceRegistry ?? (() => undefined), agentDefaultModel: agentDefaultModel ?? (() => FAKE_DEFAULT_MODEL as any), switchIntent }
 }
 
 /** 当前会话的 exec 上下文。 */
@@ -180,36 +183,39 @@ describe('registerSessionTools', () => {
     expect(intent.consume()).toMatch(/^session-/)
   })
 
-  it('create_session 通过 setup 安装 model selection', async () => {
+  it('create_session 通过 agentOptions 声明默认模型 seed 路由', async () => {
     const ctx = makeCtx()
-    const defaultModel = { currentSelection: () => ({ provider: 'deepseek', model: 'test-model' }) }
+    const defaultModel = { currentSelection: () => ({ provider: 'deepseek', model: 'test-model', reasoningEffort: 'high' }) }
     registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), undefined, () => defaultModel as any))
     const tool = getTool(ctx.registered, 'create_session')
     await tool.execute({ cwd: '/ws', initial_message: 'hi' }, execFor('session-current'))
-    // create 收到 setup 回调
+    // create 收到 agentOptions（seed 路由），而非固定快照的 model selection
     const options = ctx.createOptions[0] as any
-    expect(typeof options.setup).toBe('function')
-    // 用 fake agentCtx 调用 setup，验证注册了 model selection 监听器
+    expect(options.agentOptions).toEqual({ provider: 'deepseek', model: 'test-model' })
+    // setup 不再安装覆盖 provider/model 的 model selection 监听器（否则会覆盖会话中途的模型切换）
     const listeners: [string, Function][] = []
     const agentCtx = { on: (event: string, listener: Function) => { listeners.push([event, listener]); return () => {} } }
-    options.setup(agentCtx)
+    await options.setup(agentCtx)
     const events = listeners.map(([e]) => e)
-    expect(events).toContain('system-prompt/assemble')
-    expect(events).toContain('agent/request')
-    // 调用 assemble 监听器，验证 variables 注入 provider/model
-    const assemble = listeners.find(([e]) => e === 'system-prompt/assemble')![1]
-    const assembled = await assemble({}, {}, async () => ({ variables: {} }))
-    expect(assembled.variables).toEqual({ provider: 'deepseek', model: 'test-model' })
+    expect(events).not.toContain('system-prompt/assemble')
+    // 仅装 agent/request 兜底 listener：只在缺 reasoningEffort 且 provider/model 匹配时补齐
+    const request = listeners.find(([e]) => e === 'agent/request')![1]
+    expect(await request({}, async () => ({ provider: 'deepseek', model: 'test-model' })))
+      .toEqual({ provider: 'deepseek', model: 'test-model', reasoningEffort: 'high' })
+    // provider/model 不匹配时不误补
+    expect(await request({}, async () => ({ provider: 'other', model: 'm' })))
+      .toEqual({ provider: 'other', model: 'm' })
+    // 已有 reasoningEffort 时保持原样
+    expect(await request({}, async () => ({ provider: 'deepseek', model: 'test-model', reasoningEffort: 'low' })))
+      .toEqual({ provider: 'deepseek', model: 'test-model', reasoningEffort: 'low' })
   })
 
-  it('create_session 缺 agentDefaultModel 时 setup fail-closed', async () => {
+  it('create_session 缺 agentDefaultModel 时 fail-closed 拒绝创建', async () => {
     const ctx = makeCtx()
-    registerSessionTools(ctx as any, noSandbox(), makeDeps()) // agentDefaultModel 缺失
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), undefined, () => undefined)) // agentDefaultModel 缺失
     const tool = getTool(ctx.registered, 'create_session')
-    await tool.execute({ cwd: '/ws', initial_message: 'hi' }, execFor('session-current'))
-    const options = ctx.createOptions[0] as any
-    const agentCtx = { on: () => () => {} }
-    expect(() => options.setup(agentCtx)).toThrow('agent-default-model-unavailable')
+    await expect(tool.execute({ cwd: '/ws', initial_message: 'hi' }, execFor('session-current'))).rejects.toThrow('agent-default-model-unavailable')
+    expect(ctx.createOptions).toHaveLength(0)
   })
 
   it('create_session 指定 workspace_id 时归属该 workspace', async () => {

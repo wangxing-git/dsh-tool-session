@@ -31,7 +31,7 @@ DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话
 - 提权经 `approveEscalation` 走 fail-closed 用户审批：非严格更宽、无审批服务、无 agent、拒绝/取消均不执行任何会话变更。
 - `archive_session` 归档属破坏性操作，除沙箱提权外另经 `approval.request` 独立用户审批：无审批服务、无 agent、被拒/取消均不归档（fail-closed）。
 - 会话操作本身经 host 服务（`ctx.agents` / `ctx.sessionTitle` / `ctx.workspaceRegistry` / `ctx.agentDefaultModel`）完成，不直接碰会话持久化文件。
-- `create_session` 通过 `setup` 安装 model selection（注入 provider/model prompt 变量并路由请求），缺省模型服务时 fail-closed 拒绝创建。
+- `create_session` 通过 `agentOptions` 声明默认模型的 seed 路由（provider/model）；model selection 的后续切换由 host-apiproxy 的 `session.selectModel` / `session.models` 端点惰性安装的动态 ref 接管，故会话中途切换模型可即时生效。缺省模型服务时 fail-closed 拒绝创建。
 - `create_session` 创建后调用 `workspace.attachSession()` 将新会话归属到工作区：显式 `workspace_id` 优先，否则默认归属 path === cwd 的工作区（通常是当前工作区）。
 
 ## 架构

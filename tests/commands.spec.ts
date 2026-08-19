@@ -64,9 +64,12 @@ function makeCtx(opts: { ready?: boolean } = {}) {
   return { ctx, registered, createOptions, followups, injectCalls }
 }
 
+/** 默认模型 stub：命令创建会话时需要 seed 路由（provider/model）。 */
+const FAKE_DEFAULT_MODEL = { currentSelection: () => ({ provider: 'deepseek', model: 'test-model' }) }
+
 /** 标准 deps：可选服务均缺失；可注入 workspaceRegistry。 */
 function makeDeps(switchIntent = new SwitchIntent(), workspaceRegistry?: ToolDeps['workspaceRegistry']): ToolDeps {
-  return { sessionTitle: () => undefined, workspaceRegistry: workspaceRegistry ?? (() => undefined), agentDefaultModel: () => undefined, switchIntent }
+  return { sessionTitle: () => undefined, workspaceRegistry: workspaceRegistry ?? (() => undefined), agentDefaultModel: () => FAKE_DEFAULT_MODEL as any, switchIntent }
 }
 
 /** 命令 invocation：当前会话 cwd=/ws、preset=code、无额外输入、未中止。 */
