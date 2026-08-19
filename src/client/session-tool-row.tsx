@@ -110,7 +110,9 @@ const styles: Record<string, CSSProperties> = {
     whiteSpace: 'nowrap',
     minWidth: 0,
     color: 'var(--dsw-alias-label-tertiary)',
-    flex: 'auto',
+    // 只占内容宽度（flex-grow 0），让展开箭头紧跟摘要而非被推到行尾；
+    // 超长时仍可收缩（flex-shrink 1）+ 省略号截断。
+    flex: '0 1 auto',
     fontSize: 14,
     lineHeight: '24px',
     overflow: 'hidden',
