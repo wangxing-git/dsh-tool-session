@@ -37,11 +37,13 @@ DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话
 ```jsonc
 {
   "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-tool-session"] } },
-  "dependencies": { "dsh-tool-session": "link:/Users/wangxing/code/dsh-tool-session" }
+  "dependencies": { "dsh-tool-session": "github:wangxing-git/dsh-tool-session" }
 }
 ```
 
 然后在 profile 目录执行 `pnpm install`，重启 `dsh --profile web`。
+
+> 本地开发调试时，可将依赖改指向本地路径（如 `"dsh-tool-session": "link:../dsh-tool-session"`），再执行 `pnpm install`。
 
 ## 构建与测试
 
