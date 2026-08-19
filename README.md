@@ -34,10 +34,10 @@ DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话
 
 ### 方式一：命令行安装（推荐）
 
-在 profile 目录（`~/.dsh/profiles/web`）执行：
+执行以下命令（`dsh plugin` 会在 `~/.dsh/profiles/web` 内调用 pnpm 完成安装）：
 
 ```bash
-pnpm add github:wangxing-git/dsh-tool-session
+dsh plugin --profile web add github:wangxing-git/dsh-tool-session
 ```
 
 再把 `dsh-tool-session` 追加进 `dsh.profile.bundles`：
