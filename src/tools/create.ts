@@ -6,6 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
+import type { AgentPresets } from '@deepseek-ai/dsh-agent-presets'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionSandboxController } from '../sandbox.js'
 import { newSessionId, renderJsonOutput, resolveCreateTarget, type ToolDeps } from '../value.js'
@@ -40,12 +41,20 @@ export function applyCreateTool(ctx: Context, sandbox: SessionSandboxController,
     async execute(args, exec) {
       await sandbox.resolveEscalation('create_session', args, exec)
       const { cwd, workspace } = resolveCreateTarget(args, exec, deps)
+
+      // 在会话存在前 resolve agent preset（undefined → 默认 preset，如 code），
+      // setup 里再 mount，对齐 host-apiproxy 的 composeAgent 创建路径。缺
+      // agentPresets 服务（rosterless 部署）时跳过，新会话仅有 host 层工具。
+      const presets = ctx.get('agentPresets') as AgentPresets | undefined
+      const requestedPreset = args.agent_preset !== undefined && args.agent_preset.trim() !== '' ? args.agent_preset.trim() : undefined
+      const resolvedId = presets === undefined ? undefined : (await presets.resolve(requestedPreset)).id
+
       const sessionId = newSessionId()
       const handle = await ctx.agents.create({
         sessionId,
         meta: {
           cwd,
-          ...(args.agent_preset !== undefined && args.agent_preset !== '' ? { agentPreset: args.agent_preset } : {}),
+          ...(resolvedId !== undefined ? { agentPreset: resolvedId } : {}),
         },
         setup: (agentCtx) => {
           // 安装 model selection：注入 provider/model prompt 变量并路由请求（对齐 host-apiproxy 的 Web agent 创建路径）。
@@ -55,6 +64,10 @@ export function applyCreateTool(ctx: Context, sandbox: SessionSandboxController,
             current: defaultModel.currentSelection(),
             assembled: undefined,
           })
+          // 挂载 agent preset（含技能目录与常规工具）。缺服务或未解析时跳过。
+          if (presets !== undefined && resolvedId !== undefined) {
+            return presets.mount(agentCtx, resolvedId).then(() => undefined)
+          }
         },
       })
       if (workspace !== undefined) {
@@ -76,7 +89,7 @@ export function applyCreateTool(ctx: Context, sandbox: SessionSandboxController,
       return {
         session_id: String(sessionId),
         cwd,
-        ...(args.agent_preset !== undefined && args.agent_preset !== '' ? { agent_preset: args.agent_preset } : {}),
+        ...(resolvedId !== undefined ? { agent_preset: resolvedId } : {}),
         ...(title !== undefined ? { title } : {}),
       }
     },

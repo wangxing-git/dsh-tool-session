@@ -240,6 +240,59 @@ describe('registerSessionTools', () => {
     await expect(tool.execute({ cwd: 'relative/path' }, execFor('session-current'))).rejects.toThrow('cwd must be an absolute path')
   })
 
+  it('create_session 传 agent_preset 时 resolve 并 mount 该 preset', async () => {
+    const ctx = makeCtx()
+    const mounted: [unknown, string][] = []
+    const presets = {
+      resolve: async (id?: string) => ({ id: id ?? 'code' }),
+      mount: async (agentCtx: unknown, id: string) => { mounted.push([agentCtx, id]); return { id } },
+    }
+    ctx.get = (name: string) => (name === 'agentPresets' ? presets : undefined)
+    const defaultModel = { currentSelection: () => ({ provider: 'p', model: 'm' }) }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), undefined, () => defaultModel as any))
+    const tool = getTool(ctx.registered, 'create_session')
+    const result = await tool.execute({ cwd: '/ws', agent_preset: 'minimal' }, execFor('session-current'))
+    // meta 记录 resolve 后的 preset id，返回值带 agent_preset
+    const options = ctx.createOptions[0] as any
+    expect(options.meta.agentPreset).toBe('minimal')
+    expect(result.agent_preset).toBe('minimal')
+    // setup 里 mount 该 preset
+    const agentCtx = { on: () => () => {} }
+    await options.setup(agentCtx)
+    expect(mounted).toEqual([[agentCtx, 'minimal']])
+  })
+
+  it('create_session 不传 agent_preset 时 resolve 默认 preset 并 mount', async () => {
+    const ctx = makeCtx()
+    const mounted: [unknown, string][] = []
+    const presets = {
+      resolve: async () => ({ id: 'code' }),
+      mount: async (agentCtx: unknown, id: string) => { mounted.push([agentCtx, id]); return { id } },
+    }
+    ctx.get = (name: string) => (name === 'agentPresets' ? presets : undefined)
+    const defaultModel = { currentSelection: () => ({ provider: 'p', model: 'm' }) }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), undefined, () => defaultModel as any))
+    const tool = getTool(ctx.registered, 'create_session')
+    const result = await tool.execute({ cwd: '/ws' }, execFor('session-current'))
+    const options = ctx.createOptions[0] as any
+    expect(options.meta.agentPreset).toBe('code')
+    expect(result.agent_preset).toBe('code')
+    const agentCtx = { on: () => () => {} }
+    await options.setup(agentCtx)
+    expect(mounted).toEqual([[agentCtx, 'code']])
+  })
+
+  it('create_session 缺 agentPresets 服务时不 resolve 不 mount', async () => {
+    const ctx = makeCtx() // get 只返回 approval，agentPresets 为 undefined
+    const defaultModel = { currentSelection: () => ({ provider: 'p', model: 'm' }) }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), undefined, () => defaultModel as any))
+    const tool = getTool(ctx.registered, 'create_session')
+    const result = await tool.execute({ cwd: '/ws' }, execFor('session-current'))
+    const options = ctx.createOptions[0] as any
+    expect(options.meta.agentPreset).toBeUndefined()
+    expect(result.agent_preset).toBeUndefined()
+  })
+
   it('switch_session 到当前会话幂等返回', async () => {
     const ctx = makeCtx()
     registerSessionTools(ctx as any, noSandbox(), makeDeps())
