@@ -32,6 +32,26 @@ DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话
 
 ## 安装到 profile
 
+### 方式一：命令行安装（推荐）
+
+在 profile 目录（`~/.dsh/profiles/web`）执行：
+
+```bash
+pnpm add github:wangxing-git/dsh-tool-session
+```
+
+再把 `dsh-tool-session` 追加进 `dsh.profile.bundles`：
+
+```jsonc
+{
+  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-tool-session"] } }
+}
+```
+
+然后重启 `dsh --profile web`。
+
+### 方式二：手动编辑 package.json
+
 在 `~/.dsh/profiles/web/package.json` 中：
 
 ```jsonc
