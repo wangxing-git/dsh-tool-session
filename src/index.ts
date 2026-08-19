@@ -13,6 +13,7 @@ import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 import { SessionSandboxController } from './sandbox.js'
 import { SwitchIntent, registerSwitchRpc } from './switch.js'
 import { registerSessionTools } from './tools/index.js'
+import { registerSessionCommands } from './commands.js'
 import type { ToolDeps } from './value.js'
 
 export { SessionSandboxController } from './sandbox.js'
@@ -43,5 +44,6 @@ export function apply(ctx: Context, _config: SessionToolConfig): void {
     switchIntent,
   }
   registerSessionTools(ctx, sandbox, deps)
+  registerSessionCommands(ctx, deps)
   registerSwitchRpc(ctx, switchIntent)
 }

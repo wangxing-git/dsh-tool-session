@@ -1,6 +1,6 @@
 # dsh-tool-session
 
-DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话创建 / 重命名 / 归档 / 切换 / 列表 / 查询 / 当前会话信息工具，支持沙箱提权审批、UI 层面的会话切换，以及会话工具在对话流中的专属视图（各自图标 + 中文标题 + 摘要，替换默认的 generic 卡片）。
+DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话创建 / 重命名 / 归档 / 切换 / 列表 / 查询 / 当前会话信息工具，支持沙箱提权审批、UI 层面的会话切换、会话工具在对话流中的专属视图（各自图标 + 中文标题 + 摘要，替换默认的 generic 卡片），并为**人**提供 `/clear`、`/new` 两个斜杠命令（在输入框直接创建新会话并切换，不经模型）。
 
 ## 功能
 
@@ -16,6 +16,15 @@ DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话
 
 > 7 个工具的结果统一以**格式化 JSON 文本**返回（缩进 2 空格），模型直接读取结构化结果，而非人类可读的文本摘要。
 
+### 斜杠命令（人类直接触发，不经 LLM）
+
+| 命令 | 作用 |
+|---|---|
+| `/clear` | 在会话输入框直接创建新会话并切换过去（清空上下文），**不经过模型**——命令在 UI 命令平面执行，斜杠输入与结果文本都不进入会话历史 |
+| `/new` | 与 `/clear` 同义：创建新会话并切换过去，不经过模型 |
+
+> 两个命令都只接受无参数形式；带参数会返回 `Usage: /clear (no arguments)`。新会话继承当前会话的工作目录（cwd）与 agent preset，创建后归属 path === cwd 的工作区并切换 UI。命令依赖 `commands` 服务（`@deepseek-ai/dsh-commands`，随 dsh base 提供）；UI-less 部署不提供该服务时命令静默不注册，7 个会话工具照常可用。
+
 ## 权限
 
 - 沙箱后端挂载时，7 个工具统一声明 `sandbox_permissions` + `justification` 提权参数（与 bash/fs 同款词汇）。
@@ -27,7 +36,7 @@ DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话
 
 ## 架构
 
-- host 端（`src/index.ts` 等）：cordis 插件，注册 7 个工具 + `/session-tool` 切换意图 RPC 端点。
+- host 端（`src/index.ts` 等）：cordis 插件，注册 7 个工具 + `/session-tool` 切换意图 RPC 端点 + `/clear`、`/new` 两个斜杠命令（`src/commands.ts`，经 `ctx.commands` 注册，复用 `src/create-session.ts` 的创建核心）。
 - client 端（`src/client.ts`）：轮询 `switch/poll` 端点完成 UI 切换，并把 7 个会话工具的专属折叠行注册进 `tool.call.toolview` keyed slot（替换未注册时的 generic 卡片）。
 - client 组件（`src/client/presentations.ts` + `src/client/session-tool-row.tsx`）：呈现注册表（每工具标题/图标/摘要提取）+ 折叠行组件（图标 + 标题 + 摘要，可展开参数/结果，状态用 StateDot 表达）。
 
@@ -77,3 +86,5 @@ npm test           # vitest 单元测试
 7. `get_current_session` 返回当前会话的 id/cwd/title/workspace 归属。
 8. `get_session` 按 session_id 返回单个会话详情（含 running/archived/workspace 归属）。
 9. 会话工具调用在对话流中显示专属视图：各自图标 + 中文标题 + 摘要，可点击展开参数/结果（不再统一显示 generic "Tool call"）。
+10. 在会话输入框输入 `/` 后，命令菜单出现 `/clear` 与 `/new`；输入 `/clear`（或 `/new`）回车后，不经模型直接创建新会话并切换过去（旧会话保留、含一条 command 生命周期记录）。
+11. 新会话继承当前会话的工作目录与 agent preset，归属相同工作区，UI 侧边栏出现并切换到新会话。

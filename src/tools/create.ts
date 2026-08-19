@@ -5,11 +5,10 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { AgentPresets } from '@deepseek-ai/dsh-agent-presets'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionSandboxController } from '../sandbox.js'
-import { newSessionId, renderJsonOutput, resolveCreateTarget, type ToolDeps } from '../value.js'
+import { createSession } from '../create-session.js'
+import { renderJsonOutput, resolveCreateTarget, type ToolDeps } from '../value.js'
 
 export function applyCreateTool(ctx: Context, sandbox: SessionSandboxController, deps: ToolDeps): void {
   ctx.tools.register(defineTool({
@@ -49,43 +48,14 @@ export function applyCreateTool(ctx: Context, sandbox: SessionSandboxController,
       const requestedPreset = args.agent_preset !== undefined && args.agent_preset.trim() !== '' ? args.agent_preset.trim() : undefined
       const resolvedId = presets === undefined ? undefined : (await presets.resolve(requestedPreset)).id
 
-      const sessionId = newSessionId()
-      const handle = await ctx.agents.create({
-        sessionId,
-        meta: {
-          cwd,
-          ...(resolvedId !== undefined ? { agentPreset: resolvedId } : {}),
-        },
-        setup: (agentCtx) => {
-          // 安装 model selection：注入 provider/model prompt 变量并路由请求（对齐 host-apiproxy 的 Web agent 创建路径）。
-          const defaultModel = deps.agentDefaultModel()
-          if (defaultModel === undefined) throw new Error('agent-default-model-unavailable: cannot install model selection for the new session')
-          installModelSelection(agentCtx, {
-            current: defaultModel.currentSelection(),
-            assembled: undefined,
-          })
-          // 挂载 agent preset（含技能目录与常规工具）。缺服务或未解析时跳过。
-          if (presets !== undefined && resolvedId !== undefined) {
-            return presets.mount(agentCtx, resolvedId).then(() => undefined)
-          }
-        },
+      const { sessionId, title } = await createSession(ctx, deps, {
+        cwd,
+        workspace,
+        ...(resolvedId !== undefined ? { presetId: resolvedId } : {}),
+        ...(args.title !== undefined && args.title.trim() !== '' ? { title: args.title } : {}),
+        ...(args.initial_message !== undefined && args.initial_message.trim() !== '' ? { initialMessage: args.initial_message } : {}),
+        switch: args.switch === true,
       })
-      if (workspace !== undefined) {
-        await workspace.attachSession(sessionId)
-      }
-      let title: string | undefined
-      if (args.title !== undefined && args.title.trim() !== '') {
-        const sessionTitle = deps.sessionTitle()
-        if (sessionTitle === undefined) throw new Error('session-title-unavailable: cannot set title')
-        title = sessionTitle.rename(handle.agent.session, args.title).title
-      }
-      if (args.initial_message !== undefined && args.initial_message.trim() !== '') {
-        handle.agent.followup(createUserMessage({
-          content: [{ type: 'text', text: args.initial_message }],
-          source: { kind: 'user' },
-        }))
-      }
-      if (args.switch === true) deps.switchIntent.request(String(sessionId))
       return {
         session_id: String(sessionId),
         cwd,
