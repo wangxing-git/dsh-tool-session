@@ -360,6 +360,49 @@ describe('registerSessionTools', () => {
     expect(archived).toEqual({ session_id: 'session-live-archived', cwd: '/ws', running: true, archived: true })
     expect(JSON.stringify(result)).not.toContain('undefined')
   })
+
+  it('list_sessions workspace_id 只返回指定工作区的会话', async () => {
+    const ctx = makeCtx()
+    ctx.agents.list = () => [{ id: 'session-ws2', session: { header: { id: 'session-ws2', cwd: '/ws2' } } }]
+    const registry = {
+      list: () => [
+        { id: 'ws-1', path: '/ws1', title: '工作区一', sessionIds: ['session-ws1-a', 'session-ws1-b'] },
+        { id: 'ws-2', path: '/ws2', title: '工作区二', sessionIds: ['session-ws2'] },
+      ],
+      archivedSessionIds: [],
+    }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ workspace_id: 'ws-1' }, execFor('session-current'))) as any
+    const ids = result.sessions.map((s: any) => s.session_id).sort()
+    expect(ids).toEqual(['session-ws1-a', 'session-ws1-b'])
+  })
+
+  it('list_sessions workspace_id 不存在的 id 返回空列表', async () => {
+    const ctx = makeCtx()
+    const registry = {
+      list: () => [{ id: 'ws-1', path: '/ws1', title: '工作区一', sessionIds: ['session-ws1-a'] }],
+      archivedSessionIds: [],
+    }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ workspace_id: 'ws-missing' }, execFor('session-current'))) as any
+    expect(result.sessions).toEqual([])
+  })
+
+  it('list_sessions workspace_id 过滤归档与孤儿会话（无归属不匹配）', async () => {
+    const ctx = makeCtx()
+    ctx.agents.list = () => [{ id: 'session-orphan', session: { header: { id: 'session-orphan', cwd: '/orphan' } } }]
+    const registry = {
+      list: () => [{ id: 'ws-1', path: '/ws1', title: '工作区一', sessionIds: ['session-ws1'] }],
+      archivedSessionIds: ['session-cold'],
+    }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ workspace_id: 'ws-1', include_archived: true }, execFor('session-current'))) as any
+    const ids = result.sessions.map((s: any) => s.session_id)
+    expect(ids).toEqual(['session-ws1'])
+  })
 })
 
 describe('renderJsonOutput 工具结果 JSON 化', () => {

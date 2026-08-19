@@ -10,7 +10,7 @@ DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话
 | `rename_session` | 重命名会话（显式标题，钉住自动标题生成） |
 | `archive_session` | 归档会话（隐藏但保留持久化日志，可恢复——本插件不提供真删除） |
 | `switch_session` | 切换当前会话（UI 跟随打开目标会话） |
-| `list_sessions` | 列出会话（id/title/cwd/running/archived/workspace 归属） |
+| `list_sessions` | 列出会话（id/title/cwd/running/archived/workspace 归属；可选 `workspace_id` 只返回指定工作区的会话，可选 `include_archived` 含归档） |
 | `get_session` | 按 id 查看单个会话详情（含 running/archived/workspace 归属） |
 | `get_current_session` | 获取当前会话信息（id/cwd/title/workspace 归属） |
 

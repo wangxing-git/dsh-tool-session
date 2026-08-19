@@ -82,7 +82,12 @@ export const SESSION_TOOL_PRESENTATIONS: Readonly<Record<string, ToolPresentatio
   list_sessions: {
     title: '列出会话',
     icon: IconListPenOutline16,
-    summarize: (args) => (args?.include_archived === true ? '含已归档' : ''),
+    summarize: (args) => {
+      const workspace = pickString(args, ['workspace_id'])
+      const archived = args?.include_archived === true
+      if (workspace !== undefined) return archived ? `工作区 ${workspace}（含已归档）` : `工作区 ${workspace}`
+      return archived ? '含已归档' : ''
+    },
   },
   get_current_session: {
     title: '当前会话',

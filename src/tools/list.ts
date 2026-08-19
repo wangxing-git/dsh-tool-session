@@ -12,9 +12,10 @@ import { renderJsonOutput, SESSION_SUMMARY_SCHEMA, type ToolDeps } from '../valu
 export function applyListTool(ctx: Context, sandbox: SessionSandboxController, deps: ToolDeps): void {
   ctx.tools.register(defineTool({
     name: 'list_sessions',
-    description: 'List sessions with id, title, cwd, running/archived flags, and workspace membership. Archived sessions are hidden unless include_archived is true.',
+    description: 'List sessions with id, title, cwd, running/archived flags, and workspace membership. Archived sessions are hidden unless include_archived is true; pass workspace_id to only return sessions of one workspace.',
     parameters: {
       include_archived: { type: 'boolean', description: 'Include archived sessions. Defaults to false.' },
+      workspace_id: { type: 'string', description: 'Filter sessions to those belonging to the given workspace id. Omit to list sessions across all workspaces.' },
       ...(sandbox.escalationModes.length > 0 ? sandbox.schemaFields() : {}),
     },
     output: {
@@ -75,8 +76,10 @@ export function applyListTool(ctx: Context, sandbox: SessionSandboxController, d
       }
 
       const includeArchived = args.include_archived === true
+      const workspaceFilter = args.workspace_id !== undefined ? String(args.workspace_id) : undefined
       const items = [...rows.values()]
         .filter((row) => includeArchived || !row.archived)
+        .filter((row) => workspaceFilter === undefined || row.workspace_id === workspaceFilter)
         .map((row) => {
           const agent = live.get(row.session_id)
           const title = agent !== undefined && sessionTitle !== undefined ? sessionTitle.get(agent.session)?.title : undefined
