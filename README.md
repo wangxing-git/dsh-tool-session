@@ -35,21 +35,13 @@ DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话
 
 ### 方式一：命令行安装（推荐）
 
-执行以下命令（`dsh plugin` 会在 `~/.dsh/profiles/web` 内调用 pnpm 完成安装）：
+执行：
 
 ```bash
 dsh plugin --profile web add github:wangxing-git/dsh-tool-session
 ```
 
-再把 `dsh-tool-session` 追加进 `dsh.profile.bundles`：
-
-```jsonc
-{
-  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-tool-session"] } }
-}
-```
-
-然后重启 `dsh --profile web`。
+`dsh plugin add` 会在 `~/.dsh/profiles/web` 内调用 pnpm 安装依赖，并在成功后自动把声明了 `dsh.bundle` 的插件追加进 `dsh.profile.bundles`，无需手动编辑。然后重启 `dsh --profile web`。
 
 ### 方式二：手动编辑 package.json
 
@@ -64,7 +56,7 @@ dsh plugin --profile web add github:wangxing-git/dsh-tool-session
 
 然后在 profile 目录执行 `pnpm install`，重启 `dsh --profile web`。
 
-> 本地开发调试时，可将依赖改指向本地路径（如 `"dsh-tool-session": "link:../dsh-tool-session"`），再执行 `pnpm install`。
+> 本地开发调试时，可用 `dsh plugin --profile web add link:/绝对路径/dsh-tool-session`，或手写 `"dsh-tool-session": "link:/绝对路径/dsh-tool-session"` 后执行 `pnpm install`（`link:` 建议用绝对路径，相对路径会相对 profile 目录解析）。
 
 ## 构建与测试
 
