@@ -83,10 +83,14 @@ export const SESSION_TOOL_PRESENTATIONS: Readonly<Record<string, ToolPresentatio
     title: '列出会话',
     icon: IconListPenOutline16,
     summarize: (args) => {
+      const query = pickString(args, ['query'])
       const workspace = pickString(args, ['workspace_id'])
       const archived = args?.include_archived === true
-      if (workspace !== undefined) return archived ? `工作区 ${workspace}（含已归档）` : `工作区 ${workspace}`
-      return archived ? '含已归档' : ''
+      const parts: string[] = []
+      if (query !== undefined) parts.push(`搜索「${query}」`)
+      if (workspace !== undefined) parts.push(archived ? `工作区 ${workspace}（含已归档）` : `工作区 ${workspace}`)
+      else if (archived) parts.push('含已归档')
+      return parts.join(' · ')
     },
   },
   get_current_session: {

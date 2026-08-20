@@ -10,7 +10,7 @@ DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话
 | `rename_session` | 重命名会话（显式标题，钉住自动标题生成） |
 | `archive_session` | 归档会话（隐藏但保留持久化日志，可恢复——本插件不提供真删除） |
 | `switch_session` | 切换当前会话（UI 跟随打开目标会话） |
-| `list_sessions` | 列出会话（id/title/cwd/running/archived/workspace 归属；可选 `workspace_id` 只返回指定工作区的会话，可选 `include_archived` 含归档） |
+| `list_sessions` | 列出会话（id/title/cwd/running/archived/workspace 归属；可选 `workspace_id` 只返回指定工作区的会话，可选 `include_archived` 含归档，可选 `query` 按关键字对标题 / 会话 id / 工作目录 / 工作区标题做大小写不敏感的子串模糊搜索） |
 | `get_session` | 按 id 查看单个会话详情（含 running/archived/workspace 归属） |
 | `get_current_session` | 获取当前会话信息（id/cwd/title/workspace 归属） |
 
@@ -88,3 +88,4 @@ npm test           # vitest 单元测试
 9. 会话工具调用在对话流中显示专属视图：各自图标 + 中文标题 + 摘要，可点击展开参数/结果（不再统一显示 generic "Tool call"）。
 10. 在会话输入框输入 `/` 后，命令菜单出现 `/clear` 与 `/new`；输入 `/clear`（或 `/new`）回车后，不经模型直接创建新会话并切换过去（旧会话保留、含一条 command 生命周期记录）。
 11. 新会话继承当前会话的工作目录与 agent preset，归属相同工作区，UI 侧边栏出现并切换到新会话。
+12. `list_sessions` 传 `query` 关键字后仅返回标题 / 会话 id / 工作目录 / 工作区标题命中该关键字的会话（大小写不敏感，`query` 与 `workspace_id` / `include_archived` 可叠加过滤）。

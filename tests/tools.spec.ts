@@ -462,6 +462,91 @@ describe('registerSessionTools', () => {
     const ids = result.sessions.map((s: any) => s.session_id)
     expect(ids).toEqual(['session-ws1'])
   })
+
+  it('list_sessions query 对标题做大小写不敏感模糊搜索', async () => {
+    const ctx = makeCtx()
+    ctx.agents.list = () => [
+      { id: 'session-a', session: { header: { id: 'session-a', cwd: '/ws' } } },
+      { id: 'session-b', session: { header: { id: 'session-b', cwd: '/ws' } } },
+    ]
+    const titleService = { get: (session: any) => ({ title: session.header.id === 'session-a' ? 'Login Module' : '支付模块' }) }
+    const registry = {
+      list: () => [{ id: 'ws-1', path: '/ws', title: '工作区', sessionIds: ['session-a', 'session-b'] }],
+      archivedSessionIds: [],
+    }
+    registerSessionTools(ctx as any, noSandbox(), { ...makeDeps(), sessionTitle: () => titleService as any, workspaceRegistry: () => registry as any })
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ query: 'login' }, execFor('session-current'))) as any
+    expect(result.sessions.map((s: any) => s.session_id)).toEqual(['session-a'])
+  })
+
+  it('list_sessions query 命中会话 id（含无标题的归档会话）', async () => {
+    const ctx = makeCtx()
+    const registry = {
+      list: () => [{ id: 'ws-1', path: '/ws', title: '工作区', sessionIds: ['session-ws-a'] }],
+      archivedSessionIds: ['session-archived-x'],
+    }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ query: 'archived-x', include_archived: true }, execFor('session-current'))) as any
+    expect(result.sessions.map((s: any) => s.session_id)).toEqual(['session-archived-x'])
+  })
+
+  it('list_sessions query 命中工作区标题', async () => {
+    const ctx = makeCtx()
+    const registry = {
+      list: () => [
+        { id: 'ws-1', path: '/ws1', title: '支付工作区', sessionIds: ['session-a'] },
+        { id: 'ws-2', path: '/ws2', title: '登录工作区', sessionIds: ['session-b'] },
+      ],
+      archivedSessionIds: [],
+    }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ query: '登录' }, execFor('session-current'))) as any
+    expect(result.sessions.map((s: any) => s.session_id)).toEqual(['session-b'])
+  })
+
+  it('list_sessions query 与 workspace_id 叠加过滤', async () => {
+    const ctx = makeCtx()
+    const registry = {
+      list: () => [
+        { id: 'ws-1', path: '/ws1', title: '工作区一', sessionIds: ['session-ws1-hit', 'session-ws1-miss'] },
+        { id: 'ws-2', path: '/ws2', title: '工作区二', sessionIds: ['session-ws2-hit'] },
+      ],
+      archivedSessionIds: [],
+    }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ workspace_id: 'ws-1', query: 'hit' }, execFor('session-current'))) as any
+    expect(result.sessions.map((s: any) => s.session_id)).toEqual(['session-ws1-hit'])
+  })
+
+  it('list_sessions query 不命中任何会话返回空列表', async () => {
+    const ctx = makeCtx()
+    ctx.agents.list = () => [{ id: 'session-a', session: { header: { id: 'session-a', cwd: '/ws' } } }]
+    const titleService = { get: () => ({ title: '支付模块' }) }
+    const registry = {
+      list: () => [{ id: 'ws-1', path: '/ws', title: '工作区', sessionIds: ['session-a'] }],
+      archivedSessionIds: [],
+    }
+    registerSessionTools(ctx as any, noSandbox(), { ...makeDeps(), sessionTitle: () => titleService as any, workspaceRegistry: () => registry as any })
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ query: '不存在的关键字' }, execFor('session-current'))) as any
+    expect(result.sessions).toEqual([])
+  })
+
+  it('list_sessions query 为空白字符串时不过滤（等价未提供）', async () => {
+    const ctx = makeCtx()
+    const registry = {
+      list: () => [{ id: 'ws-1', path: '/ws', title: '工作区', sessionIds: ['session-a', 'session-b'] }],
+      archivedSessionIds: [],
+    }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ query: '   ' }, execFor('session-current'))) as any
+    expect(result.sessions.map((s: any) => s.session_id).sort()).toEqual(['session-a', 'session-b'])
+  })
 })
 
 describe('renderJsonOutput 工具结果 JSON 化', () => {
