@@ -14,6 +14,8 @@ import { SessionSandboxController } from './sandbox.js'
 import { SwitchIntent, registerSwitchRpc } from './switch.js'
 import { registerSessionTools } from './tools/index.js'
 import { registerSessionCommands } from './commands.js'
+import { registerAutoArchive, type AutoArchiveConfig } from './auto-archive.js'
+import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { ToolDeps } from './value.js'
 
 export { SessionSandboxController } from './sandbox.js'
@@ -27,14 +29,47 @@ export const name = 'tool-session'
 /** 必需服务：工具注册表、agent 注册表（创建会话）、文件系统（沙箱能力探测）。 */
 export const inject = ['tools', 'agents', 'fs']
 
-/** 插件配置（预留：后续可加 allowSwitch/allowArchive 等开关）。 */
-export interface SessionToolConfig {}
+/** 插件配置。 */
+export interface SessionToolConfig {
+  /** 自动归档扫描配置（可选；默认关闭）。 */
+  autoArchive?: {
+    /** 总开关，默认 false。 */
+    enabled?: boolean
+    /** 「过期」阈值天数：最后活跃时间早于 now - maxAgeDays 天视为过期，默认 30。 */
+    maxAgeDays?: number
+    /** 每组（工作区 / 未分组）最多保留的未归档会话数，默认 30。 */
+    maxSessionsPerWorkspace?: number
+  }
+}
 
-/** 插件配置 schema（与 dsh-tool-fs 同款 z<Config> 标注）。 */
-export const Config: z<SessionToolConfig> = z.object({})
+/** 插件配置 schema（带默认值；autoArchive 默认关闭）。 */
+export const Config = z.object({
+  autoArchive: z.object({
+    enabled: z.boolean().default(false),
+    maxAgeDays: z.natural().min(1).default(30),
+    maxSessionsPerWorkspace: z.natural().min(1).default(30),
+  }).default({ enabled: false, maxAgeDays: 30, maxSessionsPerWorkspace: 30 }),
+})
+
+/** settings.yaml 顶层 namespace（插件短名 tool-session）。 */
+export const SETTINGS_NAMESPACE = settingsNamespace('tool-session')
+
+/** autoArchive 的解析后运行时形态（字段必填，由 cordis config + 默认兜底）。 */
+interface ResolvedSessionConfig {
+  autoArchive: AutoArchiveConfig
+}
+
+/** settings namespace schema：字段必填，base 层由 cordis config 解析提供。 */
+const SettingsSchema = z.object({
+  autoArchive: z.object({
+    enabled: z.boolean().required(),
+    maxAgeDays: z.natural().min(1).required(),
+    maxSessionsPerWorkspace: z.natural().min(1).required(),
+  }).required(),
+})
 
 /** 插件主体：注册 7 个会话工具与切换意图 RPC 端点。 */
-export function apply(ctx: Context, _config: SessionToolConfig): void {
+export function apply(ctx: Context, config: SessionToolConfig): void {
   const sandbox = new SessionSandboxController(ctx)
   const switchIntent = new SwitchIntent()
   const deps: ToolDeps = {
@@ -46,4 +81,20 @@ export function apply(ctx: Context, _config: SessionToolConfig): void {
   registerSessionTools(ctx, sandbox, deps)
   registerSessionCommands(ctx, deps)
   registerSwitchRpc(ctx, switchIntent)
+
+  // 自动归档扫描：默认关闭，开启后在任何会话创建（session/created）时触发。
+  // 配置优先级：settings.yaml（tool-session section，热生效）> cordis.patch.yml（base）> schema 默认。
+  const resolve = (c: SessionToolConfig): ResolvedSessionConfig => ({
+    autoArchive: {
+      enabled: c.autoArchive?.enabled ?? false,
+      maxAgeDays: c.autoArchive?.maxAgeDays ?? 30,
+      maxSessionsPerWorkspace: c.autoArchive?.maxSessionsPerWorkspace ?? 30,
+    },
+  })
+  let source = (): ResolvedSessionConfig => resolve(config)
+  registerAutoArchive(ctx, () => source().autoArchive)
+  installSettingsSection(ctx, SETTINGS_NAMESPACE, SettingsSchema, resolve(config), {
+    setSource: (current) => { source = current },
+    onChange: () => {},
+  })
 }

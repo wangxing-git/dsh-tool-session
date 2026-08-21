@@ -15,10 +15,41 @@ export type { ToolDeps } from './value.js';
 export declare const name = "tool-session";
 /** 必需服务：工具注册表、agent 注册表（创建会话）、文件系统（沙箱能力探测）。 */
 export declare const inject: string[];
-/** 插件配置（预留：后续可加 allowSwitch/allowArchive 等开关）。 */
+/** 插件配置。 */
 export interface SessionToolConfig {
+    /** 自动归档扫描配置（可选；默认关闭）。 */
+    autoArchive?: {
+        /** 总开关，默认 false。 */
+        enabled?: boolean;
+        /** 「过期」阈值天数：最后活跃时间早于 now - maxAgeDays 天视为过期，默认 30。 */
+        maxAgeDays?: number;
+        /** 每组（工作区 / 未分组）最多保留的未归档会话数，默认 30。 */
+        maxSessionsPerWorkspace?: number;
+    };
 }
-/** 插件配置 schema（与 dsh-tool-fs 同款 z<Config> 标注）。 */
-export declare const Config: z<SessionToolConfig>;
+/** 插件配置 schema（带默认值；autoArchive 默认关闭）。 */
+export declare const Config: z<Schemastery.ObjectS<{
+    autoArchive: z<Schemastery.ObjectS<{
+        enabled: z<boolean, boolean>;
+        maxAgeDays: z<number, number>;
+        maxSessionsPerWorkspace: z<number, number>;
+    }>, Schemastery.ObjectT<{
+        enabled: z<boolean, boolean>;
+        maxAgeDays: z<number, number>;
+        maxSessionsPerWorkspace: z<number, number>;
+    }>>;
+}>, Schemastery.ObjectT<{
+    autoArchive: z<Schemastery.ObjectS<{
+        enabled: z<boolean, boolean>;
+        maxAgeDays: z<number, number>;
+        maxSessionsPerWorkspace: z<number, number>;
+    }>, Schemastery.ObjectT<{
+        enabled: z<boolean, boolean>;
+        maxAgeDays: z<number, number>;
+        maxSessionsPerWorkspace: z<number, number>;
+    }>>;
+}>>;
+/** settings.yaml 顶层 namespace（插件短名 tool-session）。 */
+export declare const SETTINGS_NAMESPACE: import("@deepseek-ai/dsh-settings").SettingsNamespace;
 /** 插件主体：注册 7 个会话工具与切换意图 RPC 端点。 */
-export declare function apply(ctx: Context, _config: SessionToolConfig): void;
+export declare function apply(ctx: Context, config: SessionToolConfig): void;

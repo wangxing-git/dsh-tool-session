@@ -34,7 +34,48 @@ DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话
 - `create_session` 通过 `agentOptions` 声明默认模型的 seed 路由（provider/model）；model selection 的后续切换由 host-apiproxy 的 `session.selectModel` / `session.models` 端点惰性安装的动态 ref 接管，故会话中途切换模型可即时生效。缺省模型服务时 fail-closed 拒绝创建。
 - `create_session` 创建后调用 `workspace.attachSession()` 将新会话归属到工作区：显式 `workspace_id` 优先，否则默认归属 path === cwd 的工作区（通常是当前工作区）。
 
+## 自动归档扫描（可选，默认关闭）
+
+插件内置一个后台「自动归档扫描」：任何会话创建（UI 手动新建、`create_session` 工具、`/clear`、`/new`、fork 等）都会触发一次扫描，按规则静默归档历史会话。归档与手动 `archive_session` 同语义——隐藏但保留持久化日志、可恢复，但**不弹审批**（由配置显式开启的自动行为）。
+
+规则（每组独立；组 = 每个工作区 + 未分组）：
+
+- 组内未归档会话数 ≤ 上限时**不归档任何会话**（即使有超过阈值天数的会话）。
+- 组内未归档会话数 > 上限时，归档到恰好 ≤ 上限；**优先归档过期会话**（最后活跃时间超过阈值天数），过期不足则继续归档最旧的未过期会话。
+- 「过期」按最后活跃时间判定：`max(创建时间, 最后一条人类消息时间)`，与侧边栏会话排序语义一致。
+- 只归档非运行中（cold）的历史会话；正在运行的会话与新建会话永不归档。
+
+配置优先级：`settings.yaml` > `cordis.patch.yml`（composition base）> schema 默认。
+
+**方式一：settings.yaml（推荐）** —— 编辑 `~/.dsh/settings.yaml`，追加 `tool-session` 段后**重启 dsh 生效**（文件手改不会热加载；UI 设置面板的改动则即时生效）：
+
+```yaml
+tool-session:
+  autoArchive:
+    enabled: true                 # 总开关，默认 false（关闭）
+    maxAgeDays: 30                # 过期阈值天数，默认 30
+    maxSessionsPerWorkspace: 30   # 每组最多保留的未归档会话数，默认 30
+```
+
+**方式二：cordis.patch.yml（composition base，需重启）** —— 编辑 `~/.dsh/profiles/web/cordis.patch.yml`：
+
+```yaml
+- id: tool-session
+  config:
+    autoArchive:
+      enabled: true
+      maxAgeDays: 30
+      maxSessionsPerWorkspace: 30
+```
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `autoArchive.enabled` | `false` | 总开关 |
+| `autoArchive.maxAgeDays` | `30` | 过期阈值（天） |
+| `autoArchive.maxSessionsPerWorkspace` | `30` | 每组最多保留的未归档会话数 |
+
 ## 架构
+
 
 - host 端（`src/index.ts` 等）：cordis 插件，注册 7 个工具 + `/session-tool` 切换意图 RPC 端点 + `/clear`、`/new` 两个斜杠命令（`src/commands.ts`，经 `ctx.commands` 注册，复用 `src/create-session.ts` 的创建核心）。
 - client 端（`src/client.ts`）：轮询 `switch/poll` 端点完成 UI 切换，并把 7 个会话工具的专属折叠行注册进 `tool.call.toolview` keyed slot（替换未注册时的 generic 卡片）。

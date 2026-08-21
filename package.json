@@ -1,6 +1,6 @@
 {
   "name": "dsh-tool-session",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "DeepSeek Harness 会话管理工具插件：为模型提供会话创建/重命名/归档/切换/列表工具，支持沙箱提权审批，并支持 UI 层面的会话切换与会话工具的专属视图。",
   "keywords": [
     "deepseek",
@@ -66,6 +66,7 @@
     "@deepseek-ai/dsh-sandbox-policy": "^0.1.0-rc.8",
     "@deepseek-ai/dsh-session": "^0.1.0-rc.8",
     "@deepseek-ai/dsh-session-title": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-settings": "^0.1.0-rc.8",
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.8",
     "@deepseek-ai/dsh-user-approval": "^0.1.0-rc.8",
     "@deepseek-ai/dsh-workspace": "^0.1.0-rc.8",
@@ -121,6 +122,9 @@
     "@deepseek-ai/dsh-session-title": {
       "optional": true
     },
+    "@deepseek-ai/dsh-settings": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-tools": {
       "optional": true
     },
@@ -154,6 +158,7 @@
     "@deepseek-ai/dsh-sandbox-policy": "^0.1.0-rc.8",
     "@deepseek-ai/dsh-session": "^0.1.0-rc.8",
     "@deepseek-ai/dsh-session-title": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-settings": "^0.1.0-rc.8",
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.8",
     "@deepseek-ai/dsh-user-approval": "^0.1.0-rc.8",
     "@deepseek-ai/dsh-workspace": "^0.1.0-rc.8",
