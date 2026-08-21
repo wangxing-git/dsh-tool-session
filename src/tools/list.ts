@@ -1,6 +1,6 @@
 /**
  * list_sessions 工具：列出会话（id/title/cwd/running/archived/workspace 归属）。
- * 归档会话默认隐藏，除非 include_archived 为 true。
+ * 归档会话默认隐藏；用 status 过滤（'archived' 或 'all'）查看。
  *
  * @module dsh-tool-session/tools/list
  */
@@ -16,12 +16,53 @@ function matchesSessionQuery(row: { session_id: string; title?: string; cwd?: st
   return fields.some((field) => field !== undefined && field.toLowerCase().includes(needle))
 }
 
+/** 会话状态三态。 */
+type SessionStatus = 'running' | 'idle' | 'archived'
+
+/** status 参数可接受的状态字面量：三态 + 快捷值 all（展开为全部三态）。 */
+type StatusFilterValue = SessionStatus | 'all'
+
+/** 行状态投影：归档优先于 live（归档的 live 会话仍归 archived），否则 live → running，冷会话 → idle。 */
+function statusOf(row: { running: boolean; archived: boolean }): SessionStatus {
+  if (row.archived) return 'archived'
+  return row.running ? 'running' : 'idle'
+}
+
+/**
+ * 解析状态过滤集合：status 未提供时默认排除归档（running + idle）；
+ * 'all' 展开为全部三态。
+ */
+function resolveStatusFilter(status: StatusFilterValue | StatusFilterValue[] | undefined): Set<SessionStatus> {
+  const statuses = new Set<SessionStatus>()
+  if (status === undefined) {
+    statuses.add('running')
+    statuses.add('idle')
+  } else {
+    for (const value of Array.isArray(status) ? status : [status]) {
+      if (value === 'all') {
+        statuses.add('running')
+        statuses.add('idle')
+        statuses.add('archived')
+      } else {
+        statuses.add(value)
+      }
+    }
+  }
+  return statuses
+}
+
 export function applyListTool(ctx: Context, sandbox: SessionSandboxController, deps: ToolDeps): void {
   ctx.tools.register(defineTool({
     name: 'list_sessions',
-    description: 'List sessions with id, title, cwd, running/archived flags, and workspace membership. Archived sessions are hidden unless include_archived is true; pass workspace_id to only return sessions of one workspace; pass query to fuzzy-search sessions by keyword.',
+    description: 'List sessions with id, title, cwd, running/archived flags, and workspace membership. Archived sessions are hidden by default; pass status to filter by state (running/idle/archived, or all), workspace_id for one workspace, or query to fuzzy-search by keyword.',
     parameters: {
-      include_archived: { type: 'boolean', description: 'Include archived sessions. Defaults to false.' },
+      status: {
+        oneOf: [
+          { type: 'string', enum: ['running', 'idle', 'archived', 'all'] },
+          { type: 'array', items: { type: 'string', enum: ['running', 'idle', 'archived', 'all'] } },
+        ],
+        description: 'Filter by session state: "running" (live), "idle" (cold, not archived), "archived", or "all" (every state). Accepts a single value or a list of values. Omit to return non-archived sessions (running + idle).',
+      },
       workspace_id: { type: 'string', description: 'Filter sessions to those belonging to the given workspace id. Omit to list sessions across all workspaces.' },
       query: { type: 'string', description: 'Fuzzy search by keyword: case-insensitive substring match against title, session id, cwd, or workspace title. Omit to return all sessions.' },
       ...(sandbox.escalationModes.length > 0 ? sandbox.schemaFields() : {}),
@@ -83,12 +124,12 @@ export function applyListTool(ctx: Context, sandbox: SessionSandboxController, d
         }
       }
 
-      const includeArchived = args.include_archived === true
+      const statuses = resolveStatusFilter(args.status)
       const workspaceFilter = args.workspace_id !== undefined ? String(args.workspace_id) : undefined
       const rawQuery = args.query !== undefined ? args.query.trim() : ''
       const queryFilter = rawQuery !== '' ? rawQuery : undefined
       const items = [...rows.values()]
-        .filter((row) => includeArchived || !row.archived)
+        .filter((row) => statuses.has(statusOf(row)))
         .filter((row) => workspaceFilter === undefined || row.workspace_id === workspaceFilter)
         .map((row) => {
           const agent = live.get(row.session_id)

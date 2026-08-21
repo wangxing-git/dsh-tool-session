@@ -85,7 +85,9 @@ export const SESSION_TOOL_PRESENTATIONS: Readonly<Record<string, ToolPresentatio
     summarize: (args) => {
       const query = pickString(args, ['query'])
       const workspace = pickString(args, ['workspace_id'])
-      const archived = args?.include_archived === true
+      const raw = args?.status
+      const statuses = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw]
+      const archived = statuses.includes('archived') || statuses.includes('all')
       const parts: string[] = []
       if (query !== undefined) parts.push(`搜索「${query}」`)
       if (workspace !== undefined) parts.push(archived ? `工作区 ${workspace}（含已归档）` : `工作区 ${workspace}`)

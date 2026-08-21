@@ -376,7 +376,7 @@ describe('registerSessionTools', () => {
     expect(intent.consume()).toBe('session-other')
   })
 
-  it('list_sessions include_archived 归档非 live 会话不输出 undefined cwd（lossless JSON）', async () => {
+  it('list_sessions status archived 归档非 live 会话不输出 undefined cwd（lossless JSON）', async () => {
     const ctx = makeCtx()
     const registry = {
       list: () => [{ id: 'ws-1', path: '/ws', title: '工作区', sessionIds: [] }],
@@ -384,7 +384,7 @@ describe('registerSessionTools', () => {
     }
     registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
     const tool = getTool(ctx.registered, 'list_sessions')
-    const result = (await tool.execute({ include_archived: true }, execFor('session-current'))) as any
+    const result = (await tool.execute({ status: ['archived'] }, execFor('session-current'))) as any
     const archived = result.sessions.find((s: any) => s.session_id === 'session-cold')
     expect(archived).toEqual({ session_id: 'session-cold', running: false, archived: true })
     // 关键回归：整个返回包 JSON 序列化不得出现 undefined 值（否则 worker 层拒绝为 non-lossless JSON）
@@ -405,7 +405,72 @@ describe('registerSessionTools', () => {
     expect(ids).not.toContain('session-cold')
   })
 
-  it('list_sessions include_archived 归档 live 会话保留 cwd 与 running', async () => {
+  it('list_sessions status 列表 archived 只看归档会话', async () => {
+    const ctx = makeCtx()
+    ctx.agents.list = () => [{ id: 'session-live', session: { header: { id: 'session-live', cwd: '/ws' } } }]
+    const registry = {
+      list: () => [{ id: 'ws-1', path: '/ws', title: '工作区', sessionIds: ['session-live', 'session-idle'] }],
+      archivedSessionIds: ['session-cold'],
+    }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ status: ['archived'] }, execFor('session-current'))) as any
+    expect(result.sessions.map((s: any) => s.session_id)).toEqual(['session-cold'])
+  })
+
+  it('list_sessions status 单字符串 running 只看 live 会话', async () => {
+    const ctx = makeCtx()
+    ctx.agents.list = () => [{ id: 'session-live', session: { header: { id: 'session-live', cwd: '/ws' } } }]
+    const registry = {
+      list: () => [{ id: 'ws-1', path: '/ws', title: '工作区', sessionIds: ['session-live', 'session-idle'] }],
+      archivedSessionIds: ['session-cold'],
+    }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ status: 'running' }, execFor('session-current'))) as any
+    expect(result.sessions.map((s: any) => s.session_id)).toEqual(['session-live'])
+  })
+
+  it('list_sessions status idle 只看冷会话', async () => {
+    const ctx = makeCtx()
+    ctx.agents.list = () => [{ id: 'session-live', session: { header: { id: 'session-live', cwd: '/ws' } } }]
+    const registry = {
+      list: () => [{ id: 'ws-1', path: '/ws', title: '工作区', sessionIds: ['session-live', 'session-idle'] }],
+      archivedSessionIds: ['session-cold'],
+    }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ status: ['idle'] }, execFor('session-current'))) as any
+    expect(result.sessions.map((s: any) => s.session_id)).toEqual(['session-idle'])
+  })
+
+  it('list_sessions status all 返回全部（含归档）', async () => {
+    const ctx = makeCtx()
+    ctx.agents.list = () => [{ id: 'session-live', session: { header: { id: 'session-live', cwd: '/ws' } } }]
+    const registry = {
+      list: () => [{ id: 'ws-1', path: '/ws', title: '工作区', sessionIds: ['session-live', 'session-idle'] }],
+      archivedSessionIds: ['session-cold'],
+    }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ status: 'all' }, execFor('session-current'))) as any
+    expect(result.sessions.map((s: any) => s.session_id).sort()).toEqual(['session-cold', 'session-idle', 'session-live'])
+  })
+
+  it('list_sessions status 多状态列表组合过滤', async () => {
+    const ctx = makeCtx()
+    ctx.agents.list = () => [{ id: 'session-live', session: { header: { id: 'session-live', cwd: '/ws' } } }]
+    const registry = {
+      list: () => [{ id: 'ws-1', path: '/ws', title: '工作区', sessionIds: ['session-live', 'session-idle'] }],
+      archivedSessionIds: ['session-cold'],
+    }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'list_sessions')
+    const result = (await tool.execute({ status: ['running', 'archived'] }, execFor('session-current'))) as any
+    expect(result.sessions.map((s: any) => s.session_id).sort()).toEqual(['session-cold', 'session-live'])
+  })
+
+  it('list_sessions status archived 归档 live 会话保留 cwd 与 running', async () => {
     const ctx = makeCtx()
     ctx.agents.list = () => [{ id: 'session-live-archived', session: { header: { id: 'session-live-archived', cwd: '/ws' } } }]
     const registry = {
@@ -414,7 +479,7 @@ describe('registerSessionTools', () => {
     }
     registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
     const tool = getTool(ctx.registered, 'list_sessions')
-    const result = (await tool.execute({ include_archived: true }, execFor('session-current'))) as any
+    const result = (await tool.execute({ status: ['archived'] }, execFor('session-current'))) as any
     const archived = result.sessions.find((s: any) => s.session_id === 'session-live-archived')
     expect(archived).toEqual({ session_id: 'session-live-archived', cwd: '/ws', running: true, archived: true })
     expect(JSON.stringify(result)).not.toContain('undefined')
@@ -458,7 +523,7 @@ describe('registerSessionTools', () => {
     }
     registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
     const tool = getTool(ctx.registered, 'list_sessions')
-    const result = (await tool.execute({ workspace_id: 'ws-1', include_archived: true }, execFor('session-current'))) as any
+    const result = (await tool.execute({ workspace_id: 'ws-1', status: ['all'] }, execFor('session-current'))) as any
     const ids = result.sessions.map((s: any) => s.session_id)
     expect(ids).toEqual(['session-ws1'])
   })
@@ -488,7 +553,7 @@ describe('registerSessionTools', () => {
     }
     registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
     const tool = getTool(ctx.registered, 'list_sessions')
-    const result = (await tool.execute({ query: 'archived-x', include_archived: true }, execFor('session-current'))) as any
+    const result = (await tool.execute({ query: 'archived-x', status: ['archived'] }, execFor('session-current'))) as any
     expect(result.sessions.map((s: any) => s.session_id)).toEqual(['session-archived-x'])
   })
 
