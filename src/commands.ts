@@ -13,13 +13,21 @@
  * @module dsh-tool-session/commands
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { resolveSessionPreset } from '@deepseek-ai/dsh-agent-presets'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { createSession } from './create-session.js'
 import type { ToolDeps } from './value.js'
 
 /** /clear、/new 的 no-arguments 用法提示（对齐 /compact 语义）。 */
 const USAGE = 'Usage: /clear (no arguments)'
+
+/** 解析会话实际运行的 agent preset：倒序找最近一次 agent-preset/selected 事件，回退 header（对齐 dsh-agent-presets 投影语义）。 */
+function resolveSessionPreset(session: { events: readonly unknown[]; header: { agentPreset?: string } }): string | undefined {
+  for (let index = session.events.length - 1; index >= 0; index -= 1) {
+    const event = session.events[index] as { type?: unknown; data?: { agentPreset?: unknown } }
+    if (event?.type === 'agent-preset/selected' && typeof event.data?.agentPreset === 'string') return event.data.agentPreset
+  }
+  return session.header.agentPreset
+}
 
 /**
  * 执行一次「新建会话并切换」：继承当前会话的 cwd 与 agent preset，

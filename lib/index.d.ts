@@ -50,6 +50,6 @@ export declare const Config: z<Schemastery.ObjectS<{
     }>>;
 }>>;
 /** settings.yaml 顶层 namespace（插件短名 tool-session）。 */
-export declare const SETTINGS_NAMESPACE: import("@deepseek-ai/dsh-settings").SettingsNamespace;
+export declare const SETTINGS_NAMESPACE = "tool-session";
 /** 插件主体：注册 7 个会话工具与切换意图 RPC 端点。 */
 export declare function apply(ctx: Context, config: SessionToolConfig): void;

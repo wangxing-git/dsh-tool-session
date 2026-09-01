@@ -12,7 +12,7 @@
  */
 import { useState } from 'react'
 import type { CSSProperties, KeyboardEvent } from 'react'
-import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { IconChevronDownOutline14, IconInspectOutline12, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import { DEFAULT_PRESENTATION, SESSION_TOOL_PRESENTATIONS } from './presentations.js'

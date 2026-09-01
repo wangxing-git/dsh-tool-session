@@ -15,7 +15,7 @@ import { SwitchIntent, registerSwitchRpc } from './switch.js'
 import { registerSessionTools } from './tools/index.js'
 import { registerSessionCommands } from './commands.js'
 import { registerAutoArchive, type AutoArchiveConfig } from './auto-archive.js'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import type { ToolDeps } from './value.js'
 
 export { SessionSandboxController } from './sandbox.js'
@@ -52,7 +52,7 @@ export const Config = z.object({
 })
 
 /** settings.yaml 顶层 namespace（插件短名 tool-session）。 */
-export const SETTINGS_NAMESPACE = settingsNamespace('tool-session')
+export const SETTINGS_NAMESPACE = 'tool-session'
 
 /** autoArchive 的解析后运行时形态（字段必填，由 cordis config + 默认兜底）。 */
 interface ResolvedSessionConfig {
@@ -93,8 +93,10 @@ export function apply(ctx: Context, config: SessionToolConfig): void {
   })
   let source = (): ResolvedSessionConfig => resolve(config)
   registerAutoArchive(ctx, () => source().autoArchive)
-  installSettingsSection(ctx, SETTINGS_NAMESPACE, SettingsSchema, resolve(config), {
-    setSource: (current) => { source = current },
-    onChange: () => {},
+  ctx.inject(['settings'], (sctx) => {
+    sctx.settings.installSection(ctx, SETTINGS_NAMESPACE, SettingsSchema, resolve(config), {
+      setSource: (current: () => ResolvedSessionConfig) => { source = current },
+      onChange: () => {},
+    })
   })
 }
