@@ -76,7 +76,7 @@ function makeDeps(switchIntent = new SwitchIntent(), workspaceRegistry?: ToolDep
 function invocation(overrides: any = {}) {
   return {
     commandId: 'cmd-1',
-    agent: { session: { header: { id: 'session-current', cwd: '/ws', agentPreset: 'code' }, events: [] } },
+    agent: { session: { header: { id: 'session-current', cwd: '/ws', agentPreset: 'code' }, snapshotEvents: () => [] } },
     rawInput: '',
     signal: new AbortController().signal,
     ...overrides,
@@ -136,7 +136,7 @@ describe('registerSessionCommands', () => {
   it('当前会话无 cwd 时返回错误且不创建会话', async () => {
     const { ctx, registered, createOptions } = makeCtx()
     registerSessionCommands(ctx, makeDeps())
-    const agent = { session: { header: { id: 'session-current', agentPreset: 'code' }, events: [] } }
+    const agent = { session: { header: { id: 'session-current', agentPreset: 'code' }, snapshotEvents: () => [] } }
     const result = await getCmd(registered, 'clear').handler(invocation({ agent }))
     expect(result.kind).toBe('error')
     expect(createOptions).toHaveLength(0)
@@ -148,7 +148,7 @@ describe('registerSessionCommands', () => {
     const agent = {
       session: {
         header: { id: 'session-current', cwd: '/ws', agentPreset: 'code' },
-        events: [{ type: 'agent-preset/selected', data: { agentPreset: 'minimal' } }],
+        snapshotEvents: () => [{ type: 'agent-preset/selected', data: { agentPreset: 'minimal' } }],
       },
     }
     await getCmd(registered, 'clear').handler(invocation({ agent }))

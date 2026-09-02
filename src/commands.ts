@@ -21,9 +21,10 @@ import type { ToolDeps } from './value.js'
 const USAGE = 'Usage: /clear (no arguments)'
 
 /** 解析会话实际运行的 agent preset：倒序找最近一次 agent-preset/selected 事件，回退 header（对齐 dsh-agent-presets 投影语义）。 */
-function resolveSessionPreset(session: { events: readonly unknown[]; header: { agentPreset?: string } }): string | undefined {
-  for (let index = session.events.length - 1; index >= 0; index -= 1) {
-    const event = session.events[index] as { type?: unknown; data?: { agentPreset?: unknown } }
+function resolveSessionPreset(session: { snapshotEvents: () => readonly unknown[]; header: { agentPreset?: string } }): string | undefined {
+  const events = session.snapshotEvents()
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index] as { type?: unknown; data?: { agentPreset?: unknown } }
     if (event?.type === 'agent-preset/selected' && typeof event.data?.agentPreset === 'string') return event.data.agentPreset
   }
   return session.header.agentPreset
