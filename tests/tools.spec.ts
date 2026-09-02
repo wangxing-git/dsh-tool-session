@@ -180,7 +180,7 @@ describe('registerSessionTools', () => {
     const tool = getTool(ctx.registered, 'create_session')
     await tool.execute({ cwd: '/ws', initial_message: 'hi', switch: true }, execFor('session-current'))
     expect(ctx.followups).toHaveLength(1)
-    expect(intent.consume()).toMatch(/^session-/)
+    expect(intent.snapshot()).toMatch(/^session-/)
   })
 
   it('create_session 通过 agentOptions 声明默认模型 seed 路由', async () => {
@@ -373,7 +373,7 @@ describe('registerSessionTools', () => {
     ctx.agents.get = (id: string) => (id === 'session-other' ? { session: { header: { id: 'session-other' } } } : undefined)
     const tool = getTool(ctx.registered, 'switch_session')
     await tool.execute({ session_id: 'session-other' }, execFor('session-current'))
-    expect(intent.consume()).toBe('session-other')
+    expect(intent.snapshot()).toBe('session-other')
   })
 
   it('list_sessions status archived 归档非 live 会话不输出 undefined cwd（lossless JSON）', async () => {

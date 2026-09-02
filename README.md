@@ -77,8 +77,8 @@ tool-session:
 ## 架构
 
 
-- host 端（`src/index.ts` 等）：cordis 插件，注册 7 个工具 + `/session-tool` 切换意图 RPC 端点 + `/clear`、`/new` 两个斜杠命令（`src/commands.ts`，经 `ctx.commands` 注册，复用 `src/create-session.ts` 的创建核心）。
-- client 端（`src/client.ts`）：轮询 `switch/poll` 端点完成 UI 切换，并把 7 个会话工具的专属折叠行注册进 `tool.call.toolview` keyed slot（替换未注册时的 generic 卡片）。
+- host 端（`src/index.ts` 等）：cordis 插件，注册 7 个工具 + 切换意图 SSE 事件端点（`src/switch.ts`，经 `connection.fetch` 注册 `/api/tool-session/switch-events` 精确路由，以 `text/event-stream` 推送）+ `/clear`、`/new` 两个斜杠命令（`src/commands.ts`，经 `ctx.commands` 注册，复用 `src/create-session.ts` 的创建核心）。
+- client 端（`src/client.ts`）：订阅 SSE 事件流完成 UI 切换（连接存活期间零轮询，断线按 500ms 起指数退避重连，connection generation 变化时立即重订），并把 7 个会话工具的专属折叠行注册进 `tool.call.toolview` keyed slot（替换未注册时的 generic 卡片）。
 - client 组件（`src/client/presentations.ts` + `src/client/session-tool-row.tsx`）：呈现注册表（每工具标题/图标/摘要提取）+ 折叠行组件（图标 + 标题 + 摘要，可展开参数/结果，状态用 StateDot 表达）。
 
 ## 安装到 profile

@@ -1,7 +1,7 @@
 /**
  * dsh-tool-session 插件入口：为模型提供会话创建/重命名/归档/切换/列表工具，
- * 沙箱挂载时统一声明提权参数（fail-closed 用户审批），并通过 /session-tool RPC
- * 通道 + client 端轮询实现 UI 层面的会话切换。
+ * 沙箱挂载时统一声明提权参数（fail-closed 用户审批），并通过 SSE 事件流
+ * （/api/tool-session/switch-events）实现 UI 层面的会话切换。
  *
  * @module dsh-tool-session
  */

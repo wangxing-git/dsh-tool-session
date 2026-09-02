@@ -1,7 +1,7 @@
 /**
  * dsh-tool-session 插件入口：为模型提供会话创建/重命名/归档/切换/列表工具，
- * 沙箱挂载时统一声明提权参数（fail-closed 用户审批），并通过 /session-tool RPC
- * 通道 + client 端轮询实现 UI 层面的会话切换。
+ * 沙箱挂载时统一声明提权参数（fail-closed 用户审批），并通过 SSE 事件流
+ * （/api/tool-session/switch-events）实现 UI 层面的会话切换。
  *
  * @module dsh-tool-session
  */
@@ -11,7 +11,7 @@ import type { SessionTitleService } from '@deepseek-ai/dsh-session-title'
 import type { AgentDefaultModelConfig } from '@deepseek-ai/dsh-agent-default-model'
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 import { SessionSandboxController } from './sandbox.js'
-import { SwitchIntent, registerSwitchRpc } from './switch.js'
+import { SwitchIntent, registerSwitchEvents } from './switch.js'
 import { registerSessionTools } from './tools/index.js'
 import { registerSessionCommands } from './commands.js'
 import { registerAutoArchive, type AutoArchiveConfig } from './auto-archive.js'
@@ -80,7 +80,7 @@ export function apply(ctx: Context, config: SessionToolConfig): void {
   }
   registerSessionTools(ctx, sandbox, deps)
   registerSessionCommands(ctx, deps)
-  registerSwitchRpc(ctx, switchIntent)
+  registerSwitchEvents(ctx, switchIntent)
 
   // 自动归档扫描：默认关闭，开启后在任何会话创建（session/created）时触发。
   // 配置优先级：settings.yaml（tool-session section，热生效）> cordis.patch.yml（base）> schema 默认。
