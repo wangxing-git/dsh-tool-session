@@ -1,6 +1,6 @@
 {
   "name": "dsh-tool-session",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "DeepSeek Harness 会话管理工具插件：为模型提供会话创建/重命名/归档/切换/列表工具，支持沙箱提权审批，并支持 UI 层面的会话切换与会话工具的专属视图。",
   "keywords": [
     "deepseek",
