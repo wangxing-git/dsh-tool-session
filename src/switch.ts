@@ -34,7 +34,9 @@ export type SwitchFramePayload =
 interface FetchHost {
   register(route: {
     path: string
-    methods: readonly ('GET' | 'HEAD')[]
+    methods: readonly ('GET' | 'HEAD' | 'POST')[]
+    /** 请求体呈现模式（DSH 0.1.5 起必填）；本路由只读 GET，取 buffered。 */
+    requestBody: 'buffered' | 'streaming'
     fetch: (request: Request) => Promise<Response>
   }): () => Promise<void>
 }
@@ -81,6 +83,7 @@ export function registerSwitchEvents(ctx: Context, intent: SwitchIntent): void {
       const dispose = await register({
         path: SWITCH_EVENTS_PATH,
         methods: ['GET'],
+        requestBody: 'buffered',
         fetch: (request) => switchEventsResponse(intent, request),
       })
       return () => void dispose()
