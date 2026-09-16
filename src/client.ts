@@ -2,9 +2,11 @@
  * dsh-tool-session 客户端插件：
  * 1. 把 7 个会话工具的专属折叠行注册进 tool.call.toolview keyed slot，
  *    替换未注册时的 generic 卡片（见 session-tool-row.tsx）；
- * 2. 订阅 /api/tool-session/switch-events 的 SSE 事件流，收到切换意图后调用
- *    ctx.sessions.open(sessionId) 完成 UI 层面的会话切换（连接存活期间零轮询，
- *    断线按指数退避重连；connection generation 变化时立即重订）。
+ * 2. 订阅 /api/tool-session/switch-events 的 SSE 事件流，收到切换意图后经
+ *    SwitchConsumer 落地成一次 ctx.sessions.open(sessionId)（连接存活期间零轮询，
+ *    断线按指数退避重连；connection generation 变化时立即重订）。目标会话尚未
+ *    进入本地列表时 open 会抛错（未知 id fail loud），由 SwitchConsumer 在短窗口内
+ *    重试而非静默丢弃；只有窗口耗尽才告警。
  *
  * 依赖 DSH Web 宿主注入的运行时，故类型刻意宽松（ctx: any），与既有
  * dsh-autogate 的 client.tsx 一致；组件内部保持严格类型（session-tool-row.tsx）。
@@ -13,6 +15,7 @@
  */
 import { SessionToolRow } from './client/session-tool-row.js'
 import { SESSION_TOOL_PRESENTATIONS } from './client/presentations.js'
+import { SwitchConsumer } from './client/switch-consumer.js'
 
 /** SSE 事件流路径（与 host 端 src/switch.ts 的 SWITCH_EVENTS_PATH 一致）。 */
 const SWITCH_EVENTS_PATH = '/api/tool-session/switch-events'
@@ -41,9 +44,15 @@ export function apply(ctx: any): void {
   const connection = ctx.connection
   if (connection === undefined) return
 
-  const open = (sessionId: string | null | undefined): void => {
-    if (typeof sessionId === 'string' && sessionId !== '') ctx.sessions.open(sessionId)
-  }
+  // 意图落地器：目标会话可能尚未进入本地列表（open 对未知 id 抛错），由它在
+  // 短窗口内重试（列表变化即时触发 + 定时兜底），只有窗口耗尽才告警。
+  const consumer = new SwitchConsumer({
+    open: (sessionId) => { ctx.sessions.open(sessionId) },
+    subscribeList: (listener) => {
+      const dispose = ctx.sessions.list?.subscribe?.(listener)
+      return typeof dispose === 'function' ? dispose : () => {}
+    },
+  })
 
   // 按空行分帧，逐行解析 data: 前缀（SSE 帧可能跨 chunk 到达，buffer 续接）。
   const processFrame = (raw: string): void => {
@@ -51,7 +60,7 @@ export function apply(ctx: any): void {
       if (!line.startsWith('data: ')) continue
       try {
         const payload = JSON.parse(line.slice(6)) as SwitchFramePayload
-        if (payload.type === 'tool-session/switch-intent') open(payload.sessionId)
+        if (payload.type === 'tool-session/switch-intent' && payload.sessionId !== '') consumer.consume(payload.sessionId)
       } catch (_error) {
         // 坏帧：忽略继续，不中断事件流。
       }
@@ -108,5 +117,6 @@ export function apply(ctx: any): void {
     disposed = true
     resetOnGeneration?.()
     active?.abort()
+    consumer.dispose()
   }, 'tool-session: switch events subscription')
 }
