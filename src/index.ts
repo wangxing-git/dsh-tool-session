@@ -9,6 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { SessionTitleService } from '@deepseek-ai/dsh-session-title'
 import type { AgentDefaultModelConfig } from '@deepseek-ai/dsh-agent-default-model'
+import type { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 import { SessionSandboxController } from './sandbox.js'
 import { SwitchIntent, registerSwitchEvents } from './switch.js'
@@ -76,6 +77,7 @@ export function apply(ctx: Context, config: SessionToolConfig): void {
     sessionTitle: () => ctx.get('sessionTitle') as SessionTitleService | undefined,
     workspaceRegistry: () => ctx.get('workspaceRegistry') as WorkspaceRegistry | undefined,
     agentDefaultModel: () => ctx.get('agentDefaultModel') as AgentDefaultModelConfig | undefined,
+    sessionProjections: () => ctx.get('sessionProjections') as SessionProjectionRegistry | undefined,
     switchIntent,
   }
   registerSessionTools(ctx, sandbox, deps)

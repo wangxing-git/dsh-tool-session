@@ -67,16 +67,31 @@ function makeCtx(opts: { ready?: boolean } = {}) {
 /** 默认模型 stub：命令创建会话时需要 seed 路由（provider/model）。 */
 const FAKE_DEFAULT_MODEL = { currentSelection: () => ({ provider: 'deepseek', model: 'test-model' }) }
 
-/** 标准 deps：可选服务均缺失；可注入 workspaceRegistry。 */
-function makeDeps(switchIntent = new SwitchIntent(), workspaceRegistry?: ToolDeps['workspaceRegistry']): ToolDeps {
-  return { sessionTitle: () => undefined, workspaceRegistry: workspaceRegistry ?? (() => undefined), agentDefaultModel: () => FAKE_DEFAULT_MODEL as any, switchIntent }
+/** 标准 deps：可选服务均缺失；可注入 workspaceRegistry 与会话投影。 */
+function makeDeps(
+  switchIntent = new SwitchIntent(),
+  workspaceRegistry?: ToolDeps['workspaceRegistry'],
+  sessionProjections?: ToolDeps['sessionProjections'],
+): ToolDeps {
+  return {
+    sessionTitle: () => undefined,
+    workspaceRegistry: workspaceRegistry ?? (() => undefined),
+    agentDefaultModel: () => FAKE_DEFAULT_MODEL as any,
+    sessionProjections: sessionProjections ?? (() => undefined),
+    switchIntent,
+  }
 }
 
-/** 命令 invocation：当前会话 cwd=/ws、preset=code、无额外输入、未中止。 */
+/** agentPreset 投影 stub：字符串=已选择，null=未选择，undefined=key 未注册。 */
+function presetProjection(value: string | null | undefined): ToolDeps['sessionProjections'] {
+  return () => ({ stateOf: (_session: unknown, key: string) => (key === 'agentPreset' ? value : undefined) }) as any
+}
+
+/** 命令 invocation：当前会话 cwd=/ws、无额外输入、未中止。 */
 function invocation(overrides: any = {}) {
   return {
     commandId: 'cmd-1',
-    agent: { session: { header: { id: 'session-current', cwd: '/ws', agentPreset: 'code' }, snapshotEvents: () => [] } },
+    agent: { session: { header: { id: 'session-current', cwd: '/ws', agentPreset: 'code' } } },
     rawInput: '',
     signal: new AbortController().signal,
     ...overrides,
@@ -106,7 +121,7 @@ describe('registerSessionCommands', () => {
   it('clear 无参数时创建新会话并请求 UI 切换', async () => {
     const { ctx, registered, createOptions } = makeCtx()
     const intent = new SwitchIntent()
-    registerSessionCommands(ctx, makeDeps(intent))
+    registerSessionCommands(ctx, makeDeps(intent, undefined, presetProjection('code')))
     const result = await getCmd(registered, 'clear').handler(invocation())
     expect(result.kind).toBe('success')
     expect(createOptions).toHaveLength(1)
@@ -136,23 +151,39 @@ describe('registerSessionCommands', () => {
   it('当前会话无 cwd 时返回错误且不创建会话', async () => {
     const { ctx, registered, createOptions } = makeCtx()
     registerSessionCommands(ctx, makeDeps())
-    const agent = { session: { header: { id: 'session-current', agentPreset: 'code' }, snapshotEvents: () => [] } }
+    const agent = { session: { header: { id: 'session-current', agentPreset: 'code' } } }
     const result = await getCmd(registered, 'clear').handler(invocation({ agent }))
     expect(result.kind).toBe('error')
     expect(createOptions).toHaveLength(0)
   })
 
-  it('继承 preset/selected 事件后的 preset（非 header 值）', async () => {
+  it('投影已选择 preset 时新会话挂该 preset（覆盖 header 值）', async () => {
+    const { ctx, registered, createOptions } = makeCtx()
+    registerSessionCommands(ctx, makeDeps(new SwitchIntent(), undefined, presetProjection('minimal')))
+    await getCmd(registered, 'clear').handler(invocation())
+    expect(createOptions[0].meta.agentPreset).toBe('minimal')
+  })
+
+  it('投影未选择（null）时不挂 preset', async () => {
+    const { ctx, registered, createOptions } = makeCtx()
+    registerSessionCommands(ctx, makeDeps(new SwitchIntent(), undefined, presetProjection(null)))
+    await getCmd(registered, 'clear').handler(invocation())
+    expect(createOptions[0].meta.agentPreset).toBeUndefined()
+    expect('agentPreset' in createOptions[0].meta).toBe(false)
+  })
+
+  it('投影 key 未注册（undefined）时不挂 preset', async () => {
+    const { ctx, registered, createOptions } = makeCtx()
+    registerSessionCommands(ctx, makeDeps(new SwitchIntent(), undefined, presetProjection(undefined)))
+    await getCmd(registered, 'clear').handler(invocation())
+    expect('agentPreset' in createOptions[0].meta).toBe(false)
+  })
+
+  it('投影服务未挂载时不挂 preset', async () => {
     const { ctx, registered, createOptions } = makeCtx()
     registerSessionCommands(ctx, makeDeps())
-    const agent = {
-      session: {
-        header: { id: 'session-current', cwd: '/ws', agentPreset: 'code' },
-        snapshotEvents: () => [{ type: 'agent-preset/selected', data: { agentPreset: 'minimal' } }],
-      },
-    }
-    await getCmd(registered, 'clear').handler(invocation({ agent }))
-    expect(createOptions[0].meta.agentPreset).toBe('minimal')
+    await getCmd(registered, 'clear').handler(invocation())
+    expect('agentPreset' in createOptions[0].meta).toBe(false)
   })
 
   it('归属 path===cwd 的工作区', async () => {

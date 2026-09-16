@@ -13,6 +13,7 @@
  * @module dsh-tool-session/commands
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type { Session } from '@deepseek-ai/dsh-session'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { createSession } from './create-session.js'
 import type { ToolDeps } from './value.js'
@@ -20,14 +21,16 @@ import type { ToolDeps } from './value.js'
 /** /clear、/new 的 no-arguments 用法提示（对齐 /compact 语义）。 */
 const USAGE = 'Usage: /clear (no arguments)'
 
-/** 解析会话实际运行的 agent preset：倒序找最近一次 agent-preset/selected 事件，回退 header（对齐 dsh-agent-presets 投影语义）。 */
-function resolveSessionPreset(session: { snapshotEvents: () => readonly unknown[]; header: { agentPreset?: string } }): string | undefined {
-  const events = session.snapshotEvents()
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index] as { type?: unknown; data?: { agentPreset?: unknown } }
-    if (event?.type === 'agent-preset/selected' && typeof event.data?.agentPreset === 'string') return event.data.agentPreset
-  }
-  return session.header.agentPreset
+/**
+ * 解析会话实际运行的 agent preset：读官方 `agentPreset` 会话投影（由 dsh-agent-presets 注册，
+ * 语义为「header.agentPreset 初始化 + agent-preset/selected 事件推进」）。
+ * rosterless 部署或投影服务/key 未就绪时返回 undefined，新会话保持不挂 preset。
+ *
+ * 该投影取代了原先的同步事件读取（`session.snapshotEvents()`，DSH 0.1.6 起弃用）：
+ * 取值语义与官方投影单元逐字一致，且判定成本由 O(日志长度) 降为 O(1)。
+ */
+function resolveSessionPreset(session: Session, deps: ToolDeps): string | undefined {
+  return deps.sessionProjections()?.stateOf(session, 'agentPreset') ?? undefined
 }
 
 /**
@@ -47,9 +50,9 @@ async function executeNewSession(ctx: Context, deps: ToolDeps, invocation: Comma
     return { kind: 'error', text: 'Cannot start a new session: the current session has no working directory.' }
   }
   try {
-    // 继承当前会话「实际运行」的 preset（含创建后的 agent-preset/selected 事件），
+    // 继承当前会话「实际运行」的 preset（agentPreset 投影已含创建后的选择事件），
     // rosterless 部署时为 undefined，新会话保持不挂 preset。
-    const presetId = resolveSessionPreset(session)
+    const presetId = resolveSessionPreset(session, deps)
     const registry = deps.workspaceRegistry()
     const workspace = registry === undefined ? undefined : registry.list().find((ws) => ws.path === cwd)
     const { sessionId } = await createSession(ctx, deps, {

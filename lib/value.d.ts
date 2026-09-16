@@ -6,6 +6,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import { SessionId, type Session } from '@deepseek-ai/dsh-session';
+import type { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection';
 import type { SessionTitleService } from '@deepseek-ai/dsh-session-title';
 import type { AgentDefaultModelConfig } from '@deepseek-ai/dsh-agent-default-model';
 import { type Workspace, type WorkspaceRegistry } from '@deepseek-ai/dsh-workspace';
@@ -15,6 +16,8 @@ export interface ToolDeps {
     sessionTitle: () => SessionTitleService | undefined;
     workspaceRegistry: () => WorkspaceRegistry | undefined;
     agentDefaultModel: () => AgentDefaultModelConfig | undefined;
+    /** 会话投影注册表（dsh-agent-presets 的 agentPreset 投影宿主）；未挂载时读不到 preset。 */
+    sessionProjections: () => SessionProjectionRegistry | undefined;
     switchIntent: SwitchIntent;
 }
 /** 生成新会话 id（与 DSH 持久化目录 session-<uuid> 对齐）。 */
