@@ -22,6 +22,7 @@ import type { ToolDeps } from './value.js'
 export { SessionSandboxController } from './sandbox.js'
 export type { SessionEscalationArgs, EscalationSchemaFields } from './sandbox.js'
 export { SwitchIntent } from './switch.js'
+export type { SwitchIntentEvent, SwitchFramePayload } from './switch.js'
 export type { ToolDeps } from './value.js'
 
 /** Cordis 插件名（loader 诊断用）。 */

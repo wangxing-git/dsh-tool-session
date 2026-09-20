@@ -3,8 +3,9 @@
  *
  * 意图经 SSE（/api/tool-session/switch-events）到达 client 时，目标会话常常
  * 尚未进入客户端本地会话列表——会话列表走另一条 RPC 事件通道，命令路径
- * （/clear、/new）下本插件的 SSE 帧几乎总是先到。客户端 sessions.open() 的
- * 契约为「未知 id 直接抛错」（fail loud），故首次尝试失败属预期路径而非异常：
+ * （/clear、/new）下本插件的 SSE 帧几乎总是先到。客户端导航入口
+ * uiWorkspace.openSession() 的契约为「未知 id 直接抛错」（fail loud），
+ * 故首次尝试失败属预期路径而非异常：
  * 在短窗口内重试（列表变化即时触发 + 定时兜底），目标会话出现后立即成功；
  * 只有整段窗口内始终未出现才告警，绝不静默吞掉（对照 code-specs step-08）。
  *

@@ -3,10 +3,12 @@
  * 1. 把 7 个会话工具的专属折叠行注册进 tool.call.toolview keyed slot，
  *    替换未注册时的 generic 卡片（见 session-tool-row.tsx）；
  * 2. 订阅 /api/tool-session/switch-events 的 SSE 事件流，收到切换意图后经
- *    SwitchConsumer 落地成一次 ctx.sessions.open(sessionId)（连接存活期间零轮询，
- *    断线按指数退避重连；connection generation 变化时立即重订）。目标会话尚未
- *    进入本地列表时 open 会抛错（未知 id fail loud），由 SwitchConsumer 在短窗口内
+ *    SwitchConsumer 落地成一次 ctx.uiWorkspace.openSession(sessionId)（连接存活期间
+ *    零轮询，断线按指数退避重连；connection generation 变化时立即重订）。目标会话
+ *    尚未进入本地列表时导航会抛错（未知 id fail loud），由 SwitchConsumer 在短窗口内
  *    重试而非静默丢弃；只有窗口耗尽才告警。
+ *    意图帧先过 SwitchFrameGate 按 revision 去重：host 只在意图从未送达时补投，
+ *    重复/陈旧帧在此被丢弃，网络抖动重连不会把用户拽回旧会话。
  *
  * 依赖 DSH Web 宿主注入的运行时，故类型刻意宽松（ctx: any），与既有
  * dsh-autogate 的 client.tsx 一致；组件内部保持严格类型（session-tool-row.tsx）。
@@ -16,6 +18,7 @@
 import { SessionToolRow } from './client/session-tool-row.js'
 import { SESSION_TOOL_PRESENTATIONS } from './client/presentations.js'
 import { SwitchConsumer } from './client/switch-consumer.js'
+import { SwitchFrameGate } from './client/switch-frame-gate.js'
 
 /** SSE 事件流路径（与 host 端 src/switch.ts 的 SWITCH_EVENTS_PATH 一致）。 */
 const SWITCH_EVENTS_PATH = '/api/tool-session/switch-events'
@@ -26,10 +29,15 @@ const RETRY_MAX_MS = 10_000
 /** SSE 帧负载（结构匹配 host 端 SwitchFramePayload；ready 仅作连接就绪，忽略）。 */
 type SwitchFramePayload =
   | { type: 'ready' }
-  | { type: 'tool-session/switch-intent'; sessionId: string }
+  | { type: 'tool-session/switch-intent'; sessionId: string; revision?: number }
 
-/** 客户端插件依赖的服务：sessions（ctx.sessions.open 切换）、connection（连接代际重订）、slots（注册工具视图）。 */
-export const inject = ['sessions', 'connection', 'slots']
+/**
+ * 客户端插件依赖的服务：uiWorkspace（ctx.uiWorkspace.openSession 导航，DSH 0.1.6 起
+ * 会话选中与展示是 view owner 的职责，ctx.sessions 只承载目录与引用计数）、
+ * sessions（会话列表订阅，用于目标进列表后重试）、connection（连接代际重订）、
+ * slots（注册工具视图）。
+ */
+export const inject = ['uiWorkspace', 'sessions', 'connection', 'slots']
 
 /** 注册工具视图 + SSE 事件订阅副作用；插件卸载时由 ctx.effect 清理。 */
 export function apply(ctx: any): void {
@@ -40,19 +48,24 @@ export function apply(ctx: any): void {
     ),
   )
 
-  // 2. 订阅切换意图 SSE（依赖 connection；缺失时静默跳过）。
+  // 2. 订阅切换意图 SSE（依赖 connection 与导航服务；缺失时静默跳过）。
   const connection = ctx.connection
   if (connection === undefined) return
+  const navigation = ctx.uiWorkspace
+  if (navigation === undefined) return
 
-  // 意图落地器：目标会话可能尚未进入本地列表（open 对未知 id 抛错），由它在
+  // 意图落地器：目标会话可能尚未进入本地列表（导航对未知 id 抛错），由它在
   // 短窗口内重试（列表变化即时触发 + 定时兜底），只有窗口耗尽才告警。
   const consumer = new SwitchConsumer({
-    open: (sessionId) => { ctx.sessions.open(sessionId) },
+    open: (sessionId) => { navigation.openSession(sessionId) },
     subscribeList: (listener) => {
       const dispose = ctx.sessions.list?.subscribe?.(listener)
       return typeof dispose === 'function' ? dispose : () => {}
     },
   })
+
+  // 意图帧闸门：按 revision 只放行一次，挡掉重连瞬间的重复/陈旧帧（见该模块注释）。
+  const gate = new SwitchFrameGate()
 
   // 按空行分帧，逐行解析 data: 前缀（SSE 帧可能跨 chunk 到达，buffer 续接）。
   const processFrame = (raw: string): void => {
@@ -60,7 +73,9 @@ export function apply(ctx: any): void {
       if (!line.startsWith('data: ')) continue
       try {
         const payload = JSON.parse(line.slice(6)) as SwitchFramePayload
-        if (payload.type === 'tool-session/switch-intent' && payload.sessionId !== '') consumer.consume(payload.sessionId)
+        if (payload.type !== 'tool-session/switch-intent' || payload.sessionId === '') continue
+        if (!gate.accept(payload.revision)) continue
+        consumer.consume(payload.sessionId)
       } catch (_error) {
         // 坏帧：忽略继续，不中断事件流。
       }

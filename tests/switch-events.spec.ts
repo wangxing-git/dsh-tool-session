@@ -94,7 +94,7 @@ describe('registerSwitchEvents', () => {
     const frames = await readFrames(response.body!.getReader(), new TextDecoder(), 2)
     expect(frames).toEqual([
       { type: 'ready' },
-      { type: 'tool-session/switch-intent', sessionId: 'session-before' },
+      { type: 'tool-session/switch-intent', sessionId: 'session-before', revision: 1 },
     ])
   })
 
@@ -108,7 +108,7 @@ describe('registerSwitchEvents', () => {
     await readFrames(reader, decoder, 1) // ready 帧
     intent.request('session-live')
     const frames = await readFrames(reader, decoder, 1)
-    expect(frames).toEqual([{ type: 'tool-session/switch-intent', sessionId: 'session-live' }])
+    expect(frames).toEqual([{ type: 'tool-session/switch-intent', sessionId: 'session-live', revision: 1 }])
   })
 
   it('request 广播给多个活跃连接', async () => {
@@ -123,8 +123,8 @@ describe('registerSwitchEvents', () => {
     await readFrames(readerA, decoder, 1)
     await readFrames(readerB, decoder, 1)
     intent.request('session-both')
-    expect(await readFrames(readerA, decoder, 1)).toEqual([{ type: 'tool-session/switch-intent', sessionId: 'session-both' }])
-    expect(await readFrames(readerB, decoder, 1)).toEqual([{ type: 'tool-session/switch-intent', sessionId: 'session-both' }])
+    expect(await readFrames(readerA, decoder, 1)).toEqual([{ type: 'tool-session/switch-intent', sessionId: 'session-both', revision: 1 }])
+    expect(await readFrames(readerB, decoder, 1)).toEqual([{ type: 'tool-session/switch-intent', sessionId: 'session-both', revision: 1 }])
   })
 
   it('连接 abort 后关闭流', async () => {
@@ -140,5 +140,98 @@ describe('registerSwitchEvents', () => {
     await expect(reader.read()).resolves.toMatchObject({ done: true })
     // 退订后 request 不再触达已关闭连接（无订阅副作用即可）：流的读取已结束。
     intent.request('session-after-abort')
+  })
+
+  it('已投递意图在客户端重连（新连接）时不再重放——网络抖动不得把用户拽回旧会话', async () => {
+    const intent = new SwitchIntent()
+    const { ctx, route } = makeCtx(intent)
+    registerSwitchEvents(ctx as any, intent)
+
+    // 连接 A：意图产生时客户端在线，实时帧已送达（UI 已切到 session-clear）
+    const abortA = new AbortController()
+    const responseA = await route()!.fetch(new Request('http://dsh.internal' + SWITCH_EVENTS_PATH, { method: 'GET', signal: abortA.signal }))
+    const readerA = responseA.body!.getReader()
+    const decoder = new TextDecoder()
+    await readFrames(readerA, decoder, 1) // ready 帧
+    intent.request('session-clear')
+    expect(await readFrames(readerA, decoder, 1)).toEqual([{ type: 'tool-session/switch-intent', sessionId: 'session-clear', revision: 1 }])
+
+    // 网络抖动：连接 A 断开，客户端进入退避重连
+    abortA.abort()
+    await expect(readerA.read()).resolves.toMatchObject({ done: true })
+
+    // 连接 B：重连成功——陈旧意图不得重放，否则用户被拽回 session-clear
+    const abortB = new AbortController()
+    const responseB = await route()!.fetch(new Request('http://dsh.internal' + SWITCH_EVENTS_PATH, { method: 'GET', signal: abortB.signal }))
+    const readerB = responseB.body!.getReader()
+    abortB.abort()
+    expect(await readFrames(readerB, new TextDecoder(), 5)).toEqual([{ type: 'ready' }])
+  })
+
+  it('客户端断开期间产生的意图仍在新连接上补投（兜底不丢意图）', async () => {
+    const intent = new SwitchIntent()
+    const { ctx, route } = makeCtx(intent)
+    registerSwitchEvents(ctx as any, intent)
+
+    // 连接 A 建立后断开：其后退避重连窗口内的意图无人接收
+    const abortA = new AbortController()
+    const responseA = await route()!.fetch(new Request('http://dsh.internal' + SWITCH_EVENTS_PATH, { method: 'GET', signal: abortA.signal }))
+    await readFrames(responseA.body!.getReader(), new TextDecoder(), 1) // ready 帧
+    abortA.abort()
+    intent.request('session-offline')
+
+    // 新连接建立：补投未送达的意图
+    const abortB = new AbortController()
+    const responseB = await route()!.fetch(new Request('http://dsh.internal' + SWITCH_EVENTS_PATH, { method: 'GET', signal: abortB.signal }))
+    const readerB = responseB.body!.getReader()
+    abortB.abort()
+    expect(await readFrames(readerB, new TextDecoder(), 5)).toEqual([
+      { type: 'ready' },
+      { type: 'tool-session/switch-intent', sessionId: 'session-offline', revision: 1 },
+    ])
+  })
+
+  it('补投只送最新的未送达意图：被覆盖的旧意图不补投', async () => {
+    const intent = new SwitchIntent()
+    const { ctx, route } = makeCtx(intent)
+    registerSwitchEvents(ctx as any, intent)
+    intent.request('session-old')
+    intent.request('session-new')
+
+    const abort = new AbortController()
+    const response = await route()!.fetch(new Request('http://dsh.internal' + SWITCH_EVENTS_PATH, { method: 'GET', signal: abort.signal }))
+    const reader = response.body!.getReader()
+    abort.abort()
+    expect(await readFrames(reader, new TextDecoder(), 5)).toEqual([
+      { type: 'ready' },
+      { type: 'tool-session/switch-intent', sessionId: 'session-new', revision: 2 },
+    ])
+  })
+
+  it('已送达意图被新意图覆盖后，新意图仍照常补投（水位只挡已送达的）', async () => {
+    const intent = new SwitchIntent()
+    const { ctx, route } = makeCtx(intent)
+    registerSwitchEvents(ctx as any, intent)
+
+    // 连接 A 收到 rev 1（已送达）后断开
+    const abortA = new AbortController()
+    const responseA = await route()!.fetch(new Request('http://dsh.internal' + SWITCH_EVENTS_PATH, { method: 'GET', signal: abortA.signal }))
+    const readerA = responseA.body!.getReader()
+    const decoder = new TextDecoder()
+    await readFrames(readerA, decoder, 1) // ready 帧
+    intent.request('session-delivered')
+    await readFrames(readerA, decoder, 1) // switch-intent 帧
+    abortA.abort()
+
+    // 断开期间产生 rev 2：未送达，新连接应补投
+    intent.request('session-during-outage')
+    const abortB = new AbortController()
+    const responseB = await route()!.fetch(new Request('http://dsh.internal' + SWITCH_EVENTS_PATH, { method: 'GET', signal: abortB.signal }))
+    const readerB = responseB.body!.getReader()
+    abortB.abort()
+    expect(await readFrames(readerB, new TextDecoder(), 5)).toEqual([
+      { type: 'ready' },
+      { type: 'tool-session/switch-intent', sessionId: 'session-during-outage', revision: 2 },
+    ])
   })
 })

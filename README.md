@@ -77,8 +77,8 @@ tool-session:
 ## 架构
 
 
-- host 端（`src/index.ts` 等）：cordis 插件，注册 7 个工具 + 切换意图 SSE 事件端点（`src/switch.ts`，经 `connection.fetch` 注册 `/api/tool-session/switch-events` 精确路由，以 `text/event-stream` 推送）+ `/clear`、`/new` 两个斜杠命令（`src/commands.ts`，经 `ctx.commands` 注册，复用 `src/create-session.ts` 的创建核心）。
-- client 端（`src/client.ts`）：订阅 SSE 事件流完成 UI 切换（连接存活期间零轮询，断线按 500ms 起指数退避重连，connection generation 变化时立即重订），并把 7 个会话工具的专属折叠行注册进 `tool.call.toolview` keyed slot（替换未注册时的 generic 卡片）。切换意图交给 `src/client/switch-consumer.ts` 落地：`ctx.sessions.open()` 对未知 id 直接抛错（fail loud），而意图经 SSE 到达时常早于会话列表的 RPC 事件帧（命令路径 `/clear`、`/new` 尤为明显），故由它在该窗口内重试（列表变化即时触发 + 定时兜底，默认 4s 窗口 / 120ms 间隔），只有窗口耗尽才 `console.warn` 告警——不静默丢弃。
+- host 端（`src/index.ts` 等）：cordis 插件，注册 7 个工具 + 切换意图 SSE 事件端点（`src/switch.ts`，经 `connection.fetch` 注册 `/api/tool-session/switch-events` 精确路由，以 `text/event-stream` 推送）+ `/clear`、`/new` 两个斜杠命令（`src/commands.ts`，经 `ctx.commands` 注册，复用 `src/create-session.ts` 的创建核心）。切换意图按「投递水位」投递（`SwitchIntent`）：`request` 实时广播给活跃连接，任一连接写入成功即标记已送达（携带自增 `revision`）；新连接建立时**只补投从未送达的意图**（客户端断线期间产生的不丢），已送达的陈旧意图不重放——否则网络抖动重连、页面刷新、新开标签都会把用户硬拽回上一次 `/clear` 或 `switch_session` 的会话。
+- client 端（`src/client.ts`）：订阅 SSE 事件流完成 UI 切换（连接存活期间零轮询，断线按 500ms 起指数退避重连，connection generation 变化时立即重订），并把 7 个会话工具的专属折叠行注册进 `tool.call.toolview` keyed slot（替换未注册时的 generic 卡片）。切换意图交给 `src/client/switch-consumer.ts` 落地：导航入口 `ctx.uiWorkspace.openSession()`（DSH 0.1.6 起会话选中与展示是 view owner 的职责，`ctx.sessions` 只承载目录与引用计数）对未知 id 直接抛错（fail loud），而意图经 SSE 到达时常早于会话列表的 RPC 事件帧（命令路径 `/clear`、`/new` 尤为明显），故由它在该窗口内重试（列表变化即时触发 + 定时兜底，默认 4s 窗口 / 120ms 间隔），只有窗口耗尽才 `console.warn` 告警——不静默丢弃。意图帧先经 `src/client/switch-frame-gate.ts` 按 `revision` 去重（重复/陈旧帧丢弃，缺失序号的旧版帧兼容放行），重连瞬间的重复投递不会造成无谓回跳。
 - client 组件（`src/client/presentations.ts` + `src/client/session-tool-row.tsx`）：呈现注册表（每工具标题/图标/摘要提取）+ 折叠行组件（图标 + 标题 + 摘要，可展开参数/结果，状态用 StateDot 表达）。
 
 ## 安装到 profile
@@ -131,3 +131,4 @@ npm test           # vitest 单元测试
 11. 新会话继承当前会话的工作目录与 agent preset，归属相同工作区，UI 侧边栏出现并切换到新会话。
 12. `list_sessions` 传 `query` 关键字后仅返回标题 / 会话 id / 工作目录 / 工作区标题命中该关键字的会话（大小写不敏感，`query` 与 `workspace_id` / `include_archived` 可叠加过滤）。
 13. 目标会话尚未进入客户端列表时切换不会丢：`/clear`（或 `switch_session`）后 UI 仍会切过去（client 端在 4s 窗口内等会话进列表后重试落地）；若会话始终未出现，浏览器 Console 出现 `tool-session: switch intent dropped, session never listed: ...` 告警，而不是静默无反应。
+14. 网络抖动导致 SSE 断开重连（以及页面刷新、新开标签）后，UI 停留在用户当前所在的会话，不会被拽回上一次 `/clear` 或 `switch_session` 的会话；而客户端断线期间产生的切换意图仍会在重连后补投落地。

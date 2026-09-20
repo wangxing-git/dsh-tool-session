@@ -127,7 +127,7 @@ describe('registerSessionCommands', () => {
     expect(createOptions).toHaveLength(1)
     expect(createOptions[0].meta.cwd).toBe('/ws')
     expect(createOptions[0].meta.agentPreset).toBe('code')
-    expect(intent.snapshot()).toMatch(/^session-/)
+    expect(intent.peekUndelivered()?.sessionId).toMatch(/^session-/)
   })
 
   it('new 同样创建新会话并请求 UI 切换', async () => {
@@ -137,7 +137,7 @@ describe('registerSessionCommands', () => {
     const result = await getCmd(registered, 'new').handler(invocation())
     expect(result.kind).toBe('success')
     expect(createOptions).toHaveLength(1)
-    expect(intent.snapshot()).toMatch(/^session-/)
+    expect(intent.peekUndelivered()?.sessionId).toMatch(/^session-/)
   })
 
   it('带参数时返回 usage 错误且不创建会话', async () => {

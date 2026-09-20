@@ -10,6 +10,7 @@ import z from '@deepseek-ai/schemastery';
 export { SessionSandboxController } from './sandbox.js';
 export type { SessionEscalationArgs, EscalationSchemaFields } from './sandbox.js';
 export { SwitchIntent } from './switch.js';
+export type { SwitchIntentEvent, SwitchFramePayload } from './switch.js';
 export type { ToolDeps } from './value.js';
 /** Cordis 插件名（loader 诊断用）。 */
 export declare const name = "tool-session";

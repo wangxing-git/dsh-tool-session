@@ -1,6 +1,6 @@
 {
   "name": "dsh-tool-session",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "DeepSeek Harness 会话管理工具插件：为模型提供会话创建/重命名/归档/切换/列表工具，支持沙箱提权审批，并支持 UI 层面的会话切换与会话工具的专属视图。",
   "keywords": [
     "deepseek",
@@ -35,7 +35,8 @@
       "inject": [
         "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-client-modules",
-        "@deepseek-ai/dsh-client-ui-tool"
+        "@deepseek-ai/dsh-client-ui-tool",
+        "@deepseek-ai/dsh-client-ui-workspace"
       ],
       "platform": "web"
     }
@@ -60,6 +61,7 @@
     "@deepseek-ai/dsh-client-ui-primitives": "^0.1.6-alpha.2",
     "@deepseek-ai/dsh-client-ui-slots": "^0.1.6-alpha.2",
     "@deepseek-ai/dsh-client-ui-tool": "^0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-workspace": "^0.1.6-alpha.2",
     "@deepseek-ai/dsh-commands": "^0.1.6-alpha.2",
     "@deepseek-ai/dsh-fs": "^0.1.6-alpha.2",
     "@deepseek-ai/dsh-llm": "^0.1.6-alpha.2",
@@ -104,6 +106,9 @@
       "optional": true
     },
     "@deepseek-ai/dsh-client-ui-tool": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-workspace": {
       "optional": true
     },
     "@deepseek-ai/dsh-commands": {
@@ -160,6 +165,7 @@
     "@deepseek-ai/dsh-client-ui-primitives": "^0.1.6-alpha.2",
     "@deepseek-ai/dsh-client-ui-slots": "^0.1.6-alpha.2",
     "@deepseek-ai/dsh-client-ui-tool": "^0.1.6-alpha.2",
+    "@deepseek-ai/dsh-client-ui-workspace": "^0.1.6-alpha.2",
     "@deepseek-ai/dsh-commands": "^0.1.6-alpha.2",
     "@deepseek-ai/dsh-fs": "^0.1.6-alpha.2",
     "@deepseek-ai/dsh-llm": "^0.1.6-alpha.2",
