@@ -14,7 +14,7 @@ import { useState } from 'react'
 import type { CSSProperties, KeyboardEvent } from 'react'
 import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
-import { IconChevronDownOutline14, IconInspectOutline12, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronDownOutlineMedium, IconInspectOutlineMedium, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import { DEFAULT_PRESENTATION, SESSION_TOOL_PRESENTATIONS } from './presentations.js'
 
 /** 折叠行展示状态（running/ok/error/stopped）。 */
@@ -224,7 +224,7 @@ export function SessionToolRow({ toolName, block, inspect }: ToolCallViewProps) 
         )}
         {expandable && (
           <span style={{ ...styles.chevron, display: 'inline-flex', transform: open ? 'rotate(180deg)' : undefined }}>
-            <IconChevronDownOutline14 size={14} />
+            <IconChevronDownOutlineMedium size={14} />
           </span>
         )}
       </div>
@@ -246,7 +246,7 @@ export function SessionToolRow({ toolName, block, inspect }: ToolCallViewProps) 
           )}
           {inspect !== undefined && (
             <button type="button" style={styles.inspectButton} onClick={inspect}>
-              <IconInspectOutline12 />
+              <IconInspectOutlineMedium />
               Inspect
             </button>
           )}

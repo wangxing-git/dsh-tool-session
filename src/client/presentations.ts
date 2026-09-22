@@ -9,14 +9,14 @@
  */
 import type { ComponentType } from 'react'
 import {
-  IconArchiveOutline20,
-  IconBranchOutline16,
-  IconEditOutline16,
-  IconListPenOutline16,
-  IconPanelLeftOutline16,
-  IconPlusOutline16,
-  IconSearchOutline16,
-  IconSparkle16,
+  IconArchiveOutlineMedium,
+  IconBranchOutlineMedium,
+  IconEditOutlineMedium,
+  IconListPenOutlineMedium,
+  IconPanelLeftOutlineMedium,
+  IconPlusOutlineMedium,
+  IconSearchOutlineMedium,
+  IconSparkleMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 
 /** 工具行前导图标的最小 props 契约（对齐 primitives 图标签名）。 */
@@ -59,29 +59,29 @@ const summarizeSessionId = (args: Record<string, unknown> | undefined, callId: s
 export const SESSION_TOOL_PRESENTATIONS: Readonly<Record<string, ToolPresentation>> = {
   create_session: {
     title: '创建会话',
-    icon: IconPlusOutline16,
+    icon: IconPlusOutlineMedium,
     summarize: (args, callId) =>
       firstLine(pickString(args, ['title', 'initial_message', 'workspace_id']) ?? callId),
   },
   rename_session: {
     title: '重命名会话',
-    icon: IconEditOutline16,
+    icon: IconEditOutlineMedium,
     summarize: (args, callId) =>
       pickString(args, ['title']) ?? summarizeSessionId(args, callId),
   },
   archive_session: {
     title: '归档会话',
-    icon: IconArchiveOutline20,
+    icon: IconArchiveOutlineMedium,
     summarize: summarizeSessionId,
   },
   switch_session: {
     title: '切换会话',
-    icon: IconBranchOutline16,
+    icon: IconBranchOutlineMedium,
     summarize: summarizeSessionId,
   },
   list_sessions: {
     title: '列出会话',
-    icon: IconListPenOutline16,
+    icon: IconListPenOutlineMedium,
     summarize: (args) => {
       const query = pickString(args, ['query'])
       const workspace = pickString(args, ['workspace_id'])
@@ -97,12 +97,12 @@ export const SESSION_TOOL_PRESENTATIONS: Readonly<Record<string, ToolPresentatio
   },
   get_current_session: {
     title: '当前会话',
-    icon: IconPanelLeftOutline16,
+    icon: IconPanelLeftOutlineMedium,
     summarize: () => '',
   },
   get_session: {
     title: '查询会话',
-    icon: IconSearchOutline16,
+    icon: IconSearchOutlineMedium,
     summarize: summarizeSessionId,
   },
 }
@@ -110,6 +110,6 @@ export const SESSION_TOOL_PRESENTATIONS: Readonly<Record<string, ToolPresentatio
 /** 未收录工具名的兜底呈现（与 generic 卡片的 others 视觉对齐，避免空白行）。 */
 export const DEFAULT_PRESENTATION: ToolPresentation = {
   title: '会话工具',
-  icon: IconSparkle16,
+  icon: IconSparkleMedium,
   summarize: summarizeSessionId,
 }

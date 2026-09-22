@@ -5,7 +5,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { AgentPresets } from '@deepseek-ai/dsh-agent-presets'
+import type { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry'
 import { SessionSandboxController } from '../sandbox.js'
 import { createSession } from '../create-session.js'
 import { renderJsonOutput, resolveCreateTarget, type ToolDeps } from '../value.js'
@@ -44,7 +44,7 @@ export function applyCreateTool(ctx: Context, sandbox: SessionSandboxController,
       // 在会话存在前 resolve agent preset（undefined → 默认 preset，如 code），
       // setup 里再 mount，对齐 host-apiproxy 的 composeAgent 创建路径。缺
       // agentPresets 服务（rosterless 部署）时跳过，新会话仅有 host 层工具。
-      const presets = ctx.get('agentPresets') as AgentPresets | undefined
+      const presets = ctx.get('agentPresets') as AgentPresetRegistry | undefined
       const requestedPreset = args.agent_preset !== undefined && args.agent_preset.trim() !== '' ? args.agent_preset.trim() : undefined
       const resolvedId = presets === undefined ? undefined : (await presets.resolve(requestedPreset)).id
 

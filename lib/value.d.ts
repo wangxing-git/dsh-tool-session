@@ -16,7 +16,7 @@ export interface ToolDeps {
     sessionTitle: () => SessionTitleService | undefined;
     workspaceRegistry: () => WorkspaceRegistry | undefined;
     agentDefaultModel: () => AgentDefaultModelConfig | undefined;
-    /** 会话投影注册表（dsh-agent-presets 的 agentPreset 投影宿主）；未挂载时读不到 preset。 */
+    /** 会话投影注册表（dsh-agent-preset-registry 的 agentPreset 投影宿主）；未挂载时读不到 preset。 */
     sessionProjections: () => SessionProjectionRegistry | undefined;
     switchIntent: SwitchIntent;
 }

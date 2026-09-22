@@ -22,7 +22,7 @@ import type { ToolDeps } from './value.js'
 const USAGE = 'Usage: /clear (no arguments)'
 
 /**
- * 解析会话实际运行的 agent preset：读官方 `agentPreset` 会话投影（由 dsh-agent-presets 注册，
+ * 解析会话实际运行的 agent preset：读官方 `agentPreset` 会话投影（由 dsh-agent-preset-registry 注册，
  * 语义为「header.agentPreset 初始化 + agent-preset/selected 事件推进」）。
  * rosterless 部署或投影服务/key 未就绪时返回 undefined，新会话保持不挂 preset。
  *

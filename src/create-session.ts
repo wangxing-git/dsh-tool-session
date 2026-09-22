@@ -11,7 +11,7 @@
  * @module dsh-tool-session/create-session
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { AgentPresets } from '@deepseek-ai/dsh-agent-presets'
+import type { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
@@ -46,7 +46,7 @@ export interface CreateSessionResult {
  * 完成，不直接碰会话持久化文件；缺 model selection 服务时 fail-closed 拒绝。
  */
 export async function createSession(ctx: Context, deps: ToolDeps, params: CreateSessionParams): Promise<CreateSessionResult> {
-  const presets = ctx.get('agentPresets') as AgentPresets | undefined
+  const presets = ctx.get('agentPresets') as AgentPresetRegistry | undefined
   const sessionId = newSessionId()
   // 对齐 host-apiproxy 的 Web agent 创建路径：以默认模型的 provider/model 作为
   // agentOptions 的 seed 路由。model selection 的后续切换由 host-apiproxy 的
