@@ -64,7 +64,8 @@ interface SessionRowModel {
 function sessionRowModel(toolName: string, block: ToolCallBlock): SessionRowModel {
   const presentation = SESSION_TOOL_PRESENTATIONS[toolName] ?? DEFAULT_PRESENTATION
   const settled = 'kind' in block
-  const argsRaw = settled ? block.call?.argsRaw : block.argsRaw
+  // DSH 0.1.7-rc.1 起未结束调用拆为 preparing（参数未生成，无 argsRaw）与 start 两态，仅后者带 arguments。
+  const argsRaw = settled ? block.call?.argsRaw : 'argsRaw' in block ? block.argsRaw : undefined
   const args = argsRaw !== undefined ? parseArgs(argsRaw) : undefined
   const state = rowState(block)
   const input = args !== undefined
