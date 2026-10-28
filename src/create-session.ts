@@ -68,6 +68,9 @@ export async function createSession(ctx: Context, deps: ToolDeps, params: Create
       // seed 与 host-apiproxy 惰性安装的动态 ref 决定），只在请求缺少 reasoningEffort 时，
       // 用默认模型（provider/model 匹配时）的 effort 补齐——否则首轮消息会在 host-apiproxy
       // 安装动态 ref 之前丢失推理强度，导致新会话与当前会话的推理强度不一致。
+      // 弃用豁免（DSH 0.2.2）：agent/request 已标 @deprecated——官方保留现有 listener、禁止新增，
+      // 且要求替换只调整控件、不得改 provider/model/reasoningEffort 选择。本 listener 属既有调用，
+      // 仅在缺省时补值，满足约束；将来可改为在 agentOptions 里直接带 reasoningEffort（该字段已支持）。
       agentCtx.on('agent/request', async (_payload, next) => {
         const resolved = await next()
         if (resolved.reasoningEffort === undefined && resolved.provider !== undefined && resolved.model !== undefined) {
