@@ -82,9 +82,15 @@ function makeDeps(
   }
 }
 
-/** agentPreset 投影 stub：字符串=已选择，null=未选择，undefined=key 未注册。 */
+/** agentPreset 投影 stub（0.2.2 契约）：字符串=已选择，null=未选择，undefined=key 未注册。
+ *  生产代码按 client view 读取，故替身实现 snapshot；未注册 key 不出现在 values 中。 */
 function presetProjection(value: string | null | undefined): ToolDeps['sessionProjections'] {
-  return () => ({ stateOf: (_session: unknown, key: string) => (key === 'agentPreset' ? value : undefined) }) as any
+  return () => ({
+    snapshot: (_session: unknown, keys?: readonly string[]) => ({
+      asOfSeq: -1,
+      values: keys?.includes('agentPreset') === true && value !== undefined ? { agentPreset: value } : {},
+    }),
+  }) as any
 }
 
 /** 命令 invocation：当前会话 cwd=/ws、无额外输入、未中止。 */

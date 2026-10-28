@@ -15,6 +15,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+// 引入 declaration merging：SessionProjectionMap 的 `agentPreset` 条目由 registry 包声明。
+import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import { createSession } from './create-session.js'
 import type { ToolDeps } from './value.js'
 
@@ -30,7 +32,10 @@ const USAGE = 'Usage: /clear (no arguments)'
  * 取值语义与官方投影单元逐字一致，且判定成本由 O(日志长度) 降为 O(1)。
  */
 function resolveSessionPreset(session: Session, deps: ToolDeps): string | undefined {
-  return deps.sessionProjections()?.stateOf(session, 'agentPreset') ?? undefined
+  // 0.2.2 起按 key 读取的 registry.stateOf 已弃用且返回 unknown。改读同一投影的 client view：
+  // 官方 agentPreset 单元的 wire.view 是恒等映射（view(state) === state），因此 snapshot 的
+  // values.agentPreset 与 host 侧 state 逐字一致；snapshot 只读一次性 cut，语义与弃用前等价。
+  return deps.sessionProjections()?.snapshot(session, ['agentPreset']).values.agentPreset ?? undefined
 }
 
 /**
