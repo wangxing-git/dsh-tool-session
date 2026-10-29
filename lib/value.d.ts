@@ -30,8 +30,21 @@ export interface CreateTarget {
     workspace?: Workspace;
 }
 /**
+ * 找出 cwd 应归属的工作区：精确匹配（path === cwd）优先，否则回退到
+ * 「cwd 位于其目录之下」的工作区中最具体的一个（路径最长者）。
+ *
+ * 子目录 cwd 必须回退到祖先工作区：Web 侧边栏按工作区分组展示会话，未归属任何
+ * 工作区的会话落在默认折叠的「未分组」分组里，用户会以为会话没创建成功。
+ *
+ * @param workspaces - 当前注册的全部工作区。
+ * @param cwd - 新会话的绝对工作目录。
+ * @returns 命中的工作区；cwd 不在任何工作区目录之下时为 undefined。
+ */
+export declare function workspaceForCwd(workspaces: readonly Workspace[], cwd: string): Workspace | undefined;
+/**
  * 解析 create_session 的目标：cwd 优先，其次 workspace_id → path，最后回退当前会话 cwd。
- * 工作区归属：显式 workspace_id 优先，否则默认匹配 path === cwd 的工作区（通常是当前工作区）。
+ * 工作区归属：显式 workspace_id 优先，否则默认匹配 path === cwd 的工作区；
+ * cwd 是某工作区的子目录时，回退到最具体的祖先工作区。
  */
 export declare function resolveCreateTarget(args: {
     cwd?: string;

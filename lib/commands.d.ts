@@ -13,7 +13,7 @@
  * @module dsh-tool-session/commands
  */
 import type { Context } from '@deepseek-ai/cordis';
-import type { ToolDeps } from './value.js';
+import { type ToolDeps } from './value.js';
 /**
  * 注册 /clear 与 /new 命令。commands 服务就绪后注册；插件卸载时先反注册
  * 命令，再等待 in-flight 创建收尾（对齐 dsh-command-compact 的 teardown 顺序）。

@@ -18,7 +18,7 @@ import { type ToolDeps } from './value.js';
 export interface CreateSessionParams {
     /** 新会话工作目录（绝对路径）。 */
     cwd: string;
-    /** 归属工作区（可选；path === cwd 时由调用方预先匹配）。 */
+    /** 归属工作区（可选；由调用方按 cwd 或其祖先目录预先匹配）。 */
     workspace?: Workspace;
     /** 已解析的 agent preset id（undefined = 不挂 preset，rosterless 部署）。 */
     presetId?: string;

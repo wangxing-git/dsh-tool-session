@@ -12,7 +12,7 @@ import type { AgentDefaultModelConfig } from '@deepseek-ai/dsh-agent-default-mod
 import type { ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
 import { WorkspaceId, type Workspace, type WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 import { randomUUID } from 'node:crypto'
-import { isAbsolute } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import type { SwitchIntent } from './switch.js'
 
 /** 各工具执行器共享的可选服务访问器与切换意图。 */
@@ -50,8 +50,39 @@ export interface CreateTarget {
 }
 
 /**
+ * 找出 cwd 应归属的工作区：精确匹配（path === cwd）优先，否则回退到
+ * 「cwd 位于其目录之下」的工作区中最具体的一个（路径最长者）。
+ *
+ * 子目录 cwd 必须回退到祖先工作区：Web 侧边栏按工作区分组展示会话，未归属任何
+ * 工作区的会话落在默认折叠的「未分组」分组里，用户会以为会话没创建成功。
+ *
+ * @param workspaces - 当前注册的全部工作区。
+ * @param cwd - 新会话的绝对工作目录。
+ * @returns 命中的工作区；cwd 不在任何工作区目录之下时为 undefined。
+ */
+export function workspaceForCwd(workspaces: readonly Workspace[], cwd: string): Workspace | undefined {
+  const target = resolve(cwd)
+  let best: Workspace | undefined
+  let bestLength = -1
+  for (const workspace of workspaces) {
+    const root = resolve(workspace.path)
+    const rel = relative(root, target)
+    // rel === '' 为精确匹配；'..' / '../x' 开头或跨盘符（isAbsolute）说明不在该目录之下。
+    // 注意只判 '..' 前缀会误伤名为 '..foo' 的子目录，必须按路径段比较。
+    if (rel === '') return workspace
+    if (rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel)) continue
+    if (root.length > bestLength) {
+      best = workspace
+      bestLength = root.length
+    }
+  }
+  return best
+}
+
+/**
  * 解析 create_session 的目标：cwd 优先，其次 workspace_id → path，最后回退当前会话 cwd。
- * 工作区归属：显式 workspace_id 优先，否则默认匹配 path === cwd 的工作区（通常是当前工作区）。
+ * 工作区归属：显式 workspace_id 优先，否则默认匹配 path === cwd 的工作区；
+ * cwd 是某工作区的子目录时，回退到最具体的祖先工作区。
  */
 export function resolveCreateTarget(args: { cwd?: string; workspace_id?: string }, exec: { agent?: { session: Session } | undefined }, deps: ToolDeps): CreateTarget {
   const registry = deps.workspaceRegistry()
@@ -72,9 +103,9 @@ export function resolveCreateTarget(args: { cwd?: string; workspace_id?: string 
     cwd = inherited
   }
 
-  // 默认归属：未显式指定 workspace_id 时，回退到 path === cwd 的工作区。
+  // 默认归属：未显式指定 workspace_id 时，匹配 cwd 或 cwd 的祖先目录对应的工作区。
   if (workspace === undefined && registry !== undefined) {
-    workspace = registry.list().find((ws) => ws.path === cwd)
+    workspace = workspaceForCwd(registry.list(), cwd)
   }
 
   return { cwd, workspace }

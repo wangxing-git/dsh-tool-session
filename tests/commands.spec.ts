@@ -203,6 +203,18 @@ describe('registerSessionCommands', () => {
     expect(attached[0]).toMatch(/^session-/)
   })
 
+  it('当前会话 cwd 是工作区子目录时仍归属祖先工作区', async () => {
+    const { ctx, registered } = makeCtx()
+    const attached: string[] = []
+    const workspace = { path: '/ws', attachSession: async (id: string) => { attached.push(id) } }
+    const registry = { list: () => [workspace], archivedSessionIds: [], archiveSession: async () => {} }
+    registerSessionCommands(ctx, makeDeps(new SwitchIntent(), () => registry as any))
+    const nested = invocation({ agent: { session: { header: { id: 'session-current', cwd: '/ws/project', agentPreset: 'code' } } } })
+    await getCmd(registered, 'clear').handler(nested)
+    expect(attached).toHaveLength(1)
+    expect(attached[0]).toMatch(/^session-/)
+  })
+
   it('信号已中止时返回取消错误且不创建会话', async () => {
     const { ctx, registered, createOptions } = makeCtx()
     registerSessionCommands(ctx, makeDeps())

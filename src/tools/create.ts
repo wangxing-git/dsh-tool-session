@@ -16,7 +16,7 @@ export function applyCreateTool(ctx: Context, sandbox: SessionSandboxController,
     description: 'Create a new session in a workspace directory. Optionally set its title, start a first turn with an initial user message, and switch the UI to it.',
     parameters: {
       cwd: { type: 'string', description: 'Working directory for the new session. Defaults to the calling session cwd.' },
-      workspace_id: { type: 'string', description: 'Workspace id to attach the new session to. Defaults to the workspace whose path matches the resolved cwd (usually the current workspace).' },
+      workspace_id: { type: 'string', description: 'Workspace id to attach the new session to. Defaults to the workspace containing the resolved cwd (its path or an ancestor directory).' },
       title: { type: 'string', description: 'Initial title for the new session (explicit rename).' },
       agent_preset: { type: 'string', description: 'Agent preset the new session agent is composed from.' },
       switch: { type: 'boolean', description: 'When true, switch the UI to the new session after creation. Defaults to false.' },

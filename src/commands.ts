@@ -18,7 +18,7 @@ import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands
 // 引入 declaration merging：SessionProjectionMap 的 `agentPreset` 条目由 registry 包声明。
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import { createSession } from './create-session.js'
-import type { ToolDeps } from './value.js'
+import { workspaceForCwd, type ToolDeps } from './value.js'
 
 /** /clear、/new 的 no-arguments 用法提示（对齐 /compact 语义）。 */
 const USAGE = 'Usage: /clear (no arguments)'
@@ -40,7 +40,7 @@ function resolveSessionPreset(session: Session, deps: ToolDeps): string | undefi
 
 /**
  * 执行一次「新建会话并切换」：继承当前会话的 cwd 与 agent preset，
- * 创建新会话、归属 path===cwd 的工作区，并请求 UI 切换到新会话。
+ * 创建新会话、归属 cwd 本身或其祖先目录对应的工作区，并请求 UI 切换到新会话。
  */
 async function executeNewSession(ctx: Context, deps: ToolDeps, invocation: CommandInvocation): Promise<CommandResult> {
   if (invocation.rawInput.trim().length > 0) {
@@ -59,7 +59,7 @@ async function executeNewSession(ctx: Context, deps: ToolDeps, invocation: Comma
     // rosterless 部署时为 undefined，新会话保持不挂 preset。
     const presetId = resolveSessionPreset(session, deps)
     const registry = deps.workspaceRegistry()
-    const workspace = registry === undefined ? undefined : registry.list().find((ws) => ws.path === cwd)
+    const workspace = registry === undefined ? undefined : workspaceForCwd(registry.list(), cwd)
     const { sessionId } = await createSession(ctx, deps, {
       cwd,
       workspace,

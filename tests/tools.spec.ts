@@ -144,6 +144,56 @@ describe('registerSessionTools', () => {
     expect(attached[0]).toBe(result.session_id)
   })
 
+  it('create_session cwd 为工作区子目录时归属最具体的祖先工作区', async () => {
+    const ctx = makeCtx()
+    const attachedRoot: string[] = []
+    const attachedChild: string[] = []
+    const root = { path: '/ws', attachSession: async (id: string) => { attachedRoot.push(id) } }
+    const child = { path: '/ws/project', attachSession: async (id: string) => { attachedChild.push(id) } }
+    const registry = { get: () => undefined, list: () => [root, child], archivedSessionIds: [], archiveSession: async () => {} }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'create_session')
+    const result = await tool.execute({ cwd: '/ws/project/nested' }, execFor('session-other'))
+    expect(result.cwd).toBe('/ws/project/nested')
+    expect(attachedChild).toEqual([result.session_id])
+    expect(attachedRoot).toHaveLength(0)
+  })
+
+  it('create_session cwd 与工作区路径仅前缀相同时不误判为祖先', async () => {
+    const ctx = makeCtx()
+    const attached: string[] = []
+    const workspace = { path: '/ws', attachSession: async (id: string) => { attached.push(id) } }
+    const registry = { get: () => undefined, list: () => [workspace], archivedSessionIds: [], archiveSession: async () => {} }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'create_session')
+    const result = await tool.execute({ cwd: '/wsx' }, execFor('session-other'))
+    expect(result.cwd).toBe('/wsx')
+    expect(attached).toHaveLength(0)
+  })
+
+  it('create_session cwd 为以 .. 开头的子目录名时仍归属祖先工作区', async () => {
+    const ctx = makeCtx()
+    const attached: string[] = []
+    const workspace = { path: '/ws', attachSession: async (id: string) => { attached.push(id) } }
+    const registry = { get: () => undefined, list: () => [workspace], archivedSessionIds: [], archiveSession: async () => {} }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'create_session')
+    const result = await tool.execute({ cwd: '/ws/..cache' }, execFor('session-other'))
+    expect(attached).toEqual([result.session_id])
+  })
+
+  it('create_session cwd 不在任何工作区之下时不归属（保持未分组而非错挂）', async () => {
+    const ctx = makeCtx()
+    const attached: string[] = []
+    const workspace = { path: '/ws', attachSession: async (id: string) => { attached.push(id) } }
+    const registry = { get: () => undefined, list: () => [workspace], archivedSessionIds: [], archiveSession: async () => {} }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'create_session')
+    const result = await tool.execute({ cwd: '/elsewhere/project' }, execFor('session-other'))
+    expect(result.cwd).toBe('/elsewhere/project')
+    expect(attached).toHaveLength(0)
+  })
+
   it('create_session 带 initial_message 发起首轮对话', async () => {
     const ctx = makeCtx()
     registerSessionTools(ctx as any, noSandbox(), makeDeps())
@@ -183,31 +233,30 @@ describe('registerSessionTools', () => {
     expect(intent.peekUndelivered()?.sessionId).toMatch(/^session-/)
   })
 
-  it('create_session 通过 agentOptions 声明默认模型 seed 路由', async () => {
+  it('create_session 通过 agentOptions 声明默认模型的 provider/model/reasoningEffort', async () => {
     const ctx = makeCtx()
     const defaultModel = { currentSelection: () => ({ provider: 'deepseek', model: 'test-model', reasoningEffort: 'high' }) }
     registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), undefined, () => defaultModel as any))
     const tool = getTool(ctx.registered, 'create_session')
     await tool.execute({ cwd: '/ws', initial_message: 'hi' }, execFor('session-current'))
-    // create 收到 agentOptions（seed 路由），而非固定快照的 model selection
+    // create 收到 agentOptions（seed 路由，含推理强度），而非固定快照的 model selection
     const options = ctx.createOptions[0] as any
-    expect(options.agentOptions).toEqual({ provider: 'deepseek', model: 'test-model' })
-    // setup 不再安装覆盖 provider/model 的 model selection 监听器（否则会覆盖会话中途的模型切换）
-    const listeners: [string, Function][] = []
-    const agentCtx = { on: (event: string, listener: Function) => { listeners.push([event, listener]); return () => {} } }
+    expect(options.agentOptions).toEqual({ provider: 'deepseek', model: 'test-model', reasoningEffort: 'high' })
+    // setup 只挂 preset：不安装 model selection 覆盖器，也不在 agent/request 里补 reasoningEffort——
+    // step preparation 固定请求配置后 waterfall 再改值会直接抛错，首轮消息因此失败
+    const events: string[] = []
+    const agentCtx = { on: (event: string, _listener: Function) => { events.push(event); return () => {} } }
     await options.setup(agentCtx)
-    const events = listeners.map(([e]) => e)
     expect(events).not.toContain('system-prompt/assemble')
-    // 仅装 agent/request 兜底 listener：只在缺 reasoningEffort 且 provider/model 匹配时补齐
-    const request = listeners.find(([e]) => e === 'agent/request')![1]
-    expect(await request({}, async () => ({ provider: 'deepseek', model: 'test-model' })))
-      .toEqual({ provider: 'deepseek', model: 'test-model', reasoningEffort: 'high' })
-    // provider/model 不匹配时不误补
-    expect(await request({}, async () => ({ provider: 'other', model: 'm' })))
-      .toEqual({ provider: 'other', model: 'm' })
-    // 已有 reasoningEffort 时保持原样
-    expect(await request({}, async () => ({ provider: 'deepseek', model: 'test-model', reasoningEffort: 'low' })))
-      .toEqual({ provider: 'deepseek', model: 'test-model', reasoningEffort: 'low' })
+    expect(events).not.toContain('agent/request')
+  })
+
+  it('create_session 默认模型无 reasoningEffort 时 agentOptions 不带该键', async () => {
+    const ctx = makeCtx()
+    registerSessionTools(ctx as any, noSandbox(), makeDeps())
+    const tool = getTool(ctx.registered, 'create_session')
+    await tool.execute({ cwd: '/ws' }, execFor('session-current'))
+    expect((ctx.createOptions[0] as any).agentOptions).toEqual({ provider: 'deepseek', model: 'test-model' })
   })
 
   it('create_session 缺 agentDefaultModel 时 fail-closed 拒绝创建', async () => {

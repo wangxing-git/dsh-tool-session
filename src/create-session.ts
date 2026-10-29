@@ -21,7 +21,7 @@ import { newSessionId, type ToolDeps } from './value.js'
 export interface CreateSessionParams {
   /** 新会话工作目录（绝对路径）。 */
   cwd: string
-  /** 归属工作区（可选；path === cwd 时由调用方预先匹配）。 */
+  /** 归属工作区（可选；由调用方按 cwd 或其祖先目录预先匹配）。 */
   workspace?: Workspace
   /** 已解析的 agent preset id（undefined = 不挂 preset，rosterless 部署）。 */
   presetId?: string
@@ -48,39 +48,28 @@ export interface CreateSessionResult {
 export async function createSession(ctx: Context, deps: ToolDeps, params: CreateSessionParams): Promise<CreateSessionResult> {
   const presets = ctx.get('agentPresets') as AgentPresetRegistry | undefined
   const sessionId = newSessionId()
-  // 对齐 host-apiproxy 的 Web agent 创建路径：以默认模型的 provider/model 作为
-  // agentOptions 的 seed 路由。model selection 的后续切换由 host-apiproxy 的
-  // session.selectModel / session.models 端点惰性安装的动态 ref 接管；这里若再安装
-  // 一份固定快照的 model selection，会在 system-prompt/assemble 与 agent/request
-  // waterfall 中覆盖动态 ref，导致会话中途切换模型不生效。
+  // 对齐 host-apiproxy 的 Web agent 创建路径：以默认模型的 provider/model/reasoningEffort
+  // 作为 agentOptions 的 seed 路由。model selection 的后续切换由 host-apiproxy 的
+  // session.selectModel / session.models 端点惰性安装的动态 ref 接管（AgentModel.current()
+  // 先读投影、options 只是 fallback）；这里若安装一份固定快照的 model selection，会在
+  // system-prompt/assemble 与 agent/request waterfall 中覆盖动态 ref，导致会话中途切换
+  // 模型不生效。
+  //
+  // reasoningEffort 必须在这一层给出，不能在 agent/request 里补：agent-loop 的 step
+  // preparation 会把请求配置（含 reasoningEffort）固定下来，随后 agent/request 再返回
+  // 不同值会直接抛 "agent/request proposed ... after step preparation fixed ..."，
+  // 首轮消息因此失败、会话内容为空（表现为「创建了但列表里看不到的空白会话」）。
   const defaultModel = deps.agentDefaultModel()
   if (defaultModel === undefined) throw new Error('agent-default-model-unavailable: cannot resolve a default model for the new session')
-  const { provider, model } = defaultModel.currentSelection()
+  const { provider, model, reasoningEffort } = defaultModel.currentSelection()
   const handle = await ctx.agents.create({
     sessionId,
-    agentOptions: { provider, model },
+    agentOptions: { provider, model, ...(reasoningEffort !== undefined ? { reasoningEffort } : {}) },
     meta: {
       cwd: params.cwd,
       ...(params.presetId !== undefined ? { agentPreset: params.presetId } : {}),
     },
     setup: (agentCtx) => {
-      // 补充推理强度的 agent/request 兜底 listener：不覆盖 provider/model（由 agentOptions
-      // seed 与 host-apiproxy 惰性安装的动态 ref 决定），只在请求缺少 reasoningEffort 时，
-      // 用默认模型（provider/model 匹配时）的 effort 补齐——否则首轮消息会在 host-apiproxy
-      // 安装动态 ref 之前丢失推理强度，导致新会话与当前会话的推理强度不一致。
-      // 弃用豁免（DSH 0.2.2）：agent/request 已标 @deprecated——官方保留现有 listener、禁止新增，
-      // 且要求替换只调整控件、不得改 provider/model/reasoningEffort 选择。本 listener 属既有调用，
-      // 仅在缺省时补值，满足约束；将来可改为在 agentOptions 里直接带 reasoningEffort（该字段已支持）。
-      agentCtx.on('agent/request', async (_payload, next) => {
-        const resolved = await next()
-        if (resolved.reasoningEffort === undefined && resolved.provider !== undefined && resolved.model !== undefined) {
-          const d = deps.agentDefaultModel()?.currentSelection()
-          if (d !== undefined && d.reasoningEffort !== undefined && d.provider === resolved.provider && d.model === resolved.model) {
-            return { ...resolved, reasoningEffort: d.reasoningEffort }
-          }
-        }
-        return resolved
-      })
       // 挂载 agent preset（含技能目录与常规工具）。缺服务或未解析时跳过。
       if (presets !== undefined && params.presetId !== undefined) {
         return presets.mount(agentCtx, params.presetId).then(() => undefined)
