@@ -24,27 +24,16 @@ export interface ToolDeps {
 export declare function newSessionId(): SessionId;
 /** 会话是否可寻址（live 或 workspace 索引或已归档）；用于 switch/get 的存在性校验。 */
 export declare function sessionExists(sid: SessionId, ctx: Context, deps: ToolDeps): boolean;
-/** create_session 的目标：解析出的工作目录，以及（显式指定或默认匹配时）待归属的工作区。 */
+/** create_session 的目标：解析出的工作目录，以及（校验通过时）归属的工作区。 */
 export interface CreateTarget {
     cwd: string;
     workspace?: Workspace;
 }
 /**
- * 找出 cwd 应归属的工作区：精确匹配（path === cwd）优先，否则回退到
- * 「cwd 位于其目录之下」的工作区中最具体的一个（路径最长者）。
- *
- * 子目录 cwd 必须回退到祖先工作区：Web 侧边栏按工作区分组展示会话，未归属任何
- * 工作区的会话落在默认折叠的「未分组」分组里，用户会以为会话没创建成功。
- *
- * @param workspaces - 当前注册的全部工作区。
- * @param cwd - 新会话的绝对工作目录。
- * @returns 命中的工作区；cwd 不在任何工作区目录之下时为 undefined。
- */
-export declare function workspaceForCwd(workspaces: readonly Workspace[], cwd: string): Workspace | undefined;
-/**
  * 解析 create_session 的目标：cwd 优先，其次 workspace_id → path，最后回退当前会话 cwd。
- * 工作区归属：显式 workspace_id 优先，否则默认匹配 path === cwd 的工作区；
- * cwd 是某工作区的子目录时，回退到最具体的祖先工作区。
+ * 工作区归属 fail-closed：cwd（realpath 归一后）必须精确等于一个已注册工作区——
+ * 显式 workspace_id 时校验 cwd 与该项路径一致；未指定时按 cwd 反查工作区。
+ * 无 workspaceRegistry 服务（rosterless 部署）时无法校验，保持不归属。
  */
 export declare function resolveCreateTarget(args: {
     cwd?: string;
@@ -53,7 +42,7 @@ export declare function resolveCreateTarget(args: {
     agent?: {
         session: Session;
     } | undefined;
-}, deps: ToolDeps): CreateTarget;
+}, deps: ToolDeps): Promise<CreateTarget>;
 /** 会话摘要的共享 output schema：get_session 的单对象与 list_sessions 的数组项共用。 */
 export declare const SESSION_SUMMARY_SCHEMA: {
     readonly type: "object";

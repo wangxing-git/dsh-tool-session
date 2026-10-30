@@ -1,8 +1,20 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { registerSessionTools } from '../src/tools/index.js'
 import { SessionSandboxController } from '../src/sandbox.js'
 import { SwitchIntent } from '../src/switch.js'
 import { renderJsonOutput, type ToolDeps } from '../src/value.js'
+
+/** 真实工作区目录：归属校验走 realpath，必须用真实存在的目录（macOS 的 tmpdir 需先 realpath 归一）。 */
+let WS_ROOT = ''
+beforeAll(async () => {
+  WS_ROOT = await realpath(await mkdtemp(join(tmpdir(), 'dsh-tool-session-ws-')))
+})
+afterAll(async () => {
+  await rm(WS_ROOT, { recursive: true, force: true })
+})
 
 interface ToolDef {
   name: string
@@ -49,10 +61,10 @@ function makeDeps(switchIntent = new SwitchIntent(), workspaceRegistry?: ToolDep
   return { sessionTitle: () => undefined, workspaceRegistry: workspaceRegistry ?? (() => undefined), agentDefaultModel: agentDefaultModel ?? (() => FAKE_DEFAULT_MODEL as any), switchIntent }
 }
 
-/** 当前会话的 exec 上下文。 */
-function execFor(sessionId: string): any {
+/** 当前会话的 exec 上下文（cwd 默认 /ws；工作区归属用例传真实目录）。 */
+function execFor(sessionId: string, cwd = '/ws'): any {
   return {
-    agent: { id: sessionId, session: { header: { id: sessionId, cwd: '/ws' } } },
+    agent: { id: sessionId, session: { header: { id: sessionId, cwd } } },
     callId: 'call-1',
     signal: new AbortController().signal,
   }
@@ -134,64 +146,50 @@ describe('registerSessionTools', () => {
   it('create_session 不传 workspace_id 时默认归属 path===cwd 的工作区', async () => {
     const ctx = makeCtx()
     const attached: string[] = []
-    const workspace = { path: '/ws', attachSession: async (id: string) => { attached.push(id) } }
+    const workspace = { path: WS_ROOT, attachSession: async (id: string) => { attached.push(id) } }
     const registry = { get: () => undefined, list: () => [workspace], archivedSessionIds: [], archiveSession: async () => {} }
     registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
     const tool = getTool(ctx.registered, 'create_session')
-    const result = await tool.execute({}, execFor('session-current'))
-    expect(result.cwd).toBe('/ws')
+    const result = await tool.execute({}, execFor('session-current', WS_ROOT))
+    expect(result.cwd).toBe(WS_ROOT)
     expect(attached).toHaveLength(1)
     expect(attached[0]).toBe(result.session_id)
   })
 
-  it('create_session cwd 为工作区子目录时归属最具体的祖先工作区', async () => {
+  it('create_session cwd 为工作区子目录时 fail-closed 报错且不创建会话', async () => {
     const ctx = makeCtx()
-    const attachedRoot: string[] = []
-    const attachedChild: string[] = []
-    const root = { path: '/ws', attachSession: async (id: string) => { attachedRoot.push(id) } }
-    const child = { path: '/ws/project', attachSession: async (id: string) => { attachedChild.push(id) } }
-    const registry = { get: () => undefined, list: () => [root, child], archivedSessionIds: [], archiveSession: async () => {} }
+    const child = join(WS_ROOT, 'project')
+    await mkdir(child, { recursive: true })
+    const registry = { get: () => undefined, list: () => [{ path: WS_ROOT, attachSession: async () => {} }], archivedSessionIds: [], archiveSession: async () => {} }
     registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
     const tool = getTool(ctx.registered, 'create_session')
-    const result = await tool.execute({ cwd: '/ws/project/nested' }, execFor('session-other'))
-    expect(result.cwd).toBe('/ws/project/nested')
-    expect(attachedChild).toEqual([result.session_id])
-    expect(attachedRoot).toHaveLength(0)
+    await expect(tool.execute({ cwd: child }, execFor('session-other', WS_ROOT))).rejects.toThrow('cwd is not a registered workspace')
+    expect(ctx.createOptions).toHaveLength(0)
   })
 
-  it('create_session cwd 与工作区路径仅前缀相同时不误判为祖先', async () => {
+  it('create_session cwd 未解析到任何已注册工作区时提示最接近的工作区', async () => {
     const ctx = makeCtx()
-    const attached: string[] = []
-    const workspace = { path: '/ws', attachSession: async (id: string) => { attached.push(id) } }
-    const registry = { get: () => undefined, list: () => [workspace], archivedSessionIds: [], archiveSession: async () => {} }
-    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
-    const tool = getTool(ctx.registered, 'create_session')
-    const result = await tool.execute({ cwd: '/wsx' }, execFor('session-other'))
-    expect(result.cwd).toBe('/wsx')
-    expect(attached).toHaveLength(0)
+    const outside = join(WS_ROOT, '..', 'outside-' + Date.now())
+    await mkdir(outside, { recursive: true })
+    try {
+      const registry = { get: () => undefined, list: () => [{ path: WS_ROOT, attachSession: async () => {} }], archivedSessionIds: [], archiveSession: async () => {} }
+      registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+      const tool = getTool(ctx.registered, 'create_session')
+      await expect(tool.execute({ cwd: outside }, execFor('session-other', WS_ROOT))).rejects.toThrow('cwd is not a registered workspace')
+      expect(ctx.createOptions).toHaveLength(0)
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
   })
 
-  it('create_session cwd 为以 .. 开头的子目录名时仍归属祖先工作区', async () => {
+  it('create_session cwd 目录不存在时 fail-closed 报错', async () => {
     const ctx = makeCtx()
-    const attached: string[] = []
-    const workspace = { path: '/ws', attachSession: async (id: string) => { attached.push(id) } }
-    const registry = { get: () => undefined, list: () => [workspace], archivedSessionIds: [], archiveSession: async () => {} }
+    const missing = join(WS_ROOT, 'missing-dir')
+    const registry = { get: () => undefined, list: () => [{ path: WS_ROOT, attachSession: async () => {} }], archivedSessionIds: [], archiveSession: async () => {} }
     registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
     const tool = getTool(ctx.registered, 'create_session')
-    const result = await tool.execute({ cwd: '/ws/..cache' }, execFor('session-other'))
-    expect(attached).toEqual([result.session_id])
-  })
-
-  it('create_session cwd 不在任何工作区之下时不归属（保持未分组而非错挂）', async () => {
-    const ctx = makeCtx()
-    const attached: string[] = []
-    const workspace = { path: '/ws', attachSession: async (id: string) => { attached.push(id) } }
-    const registry = { get: () => undefined, list: () => [workspace], archivedSessionIds: [], archiveSession: async () => {} }
-    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
-    const tool = getTool(ctx.registered, 'create_session')
-    const result = await tool.execute({ cwd: '/elsewhere/project' }, execFor('session-other'))
-    expect(result.cwd).toBe('/elsewhere/project')
-    expect(attached).toHaveLength(0)
+    await expect(tool.execute({ cwd: missing }, execFor('session-other', WS_ROOT))).rejects.toThrow('does not resolve to an existing directory')
+    expect(ctx.createOptions).toHaveLength(0)
   })
 
   it('create_session 带 initial_message 发起首轮对话', async () => {
@@ -270,14 +268,26 @@ describe('registerSessionTools', () => {
   it('create_session 指定 workspace_id 时归属该 workspace', async () => {
     const ctx = makeCtx()
     const attached: string[] = []
-    const workspace = { path: '/ws-workspace', attachSession: async (id: string) => { attached.push(id) } }
+    const workspace = { id: 'ws-1', path: WS_ROOT, attachSession: async (id: string) => { attached.push(id) } }
     const registry = { get: (id: string) => (id === 'ws-1' ? workspace : undefined), list: () => [], archivedSessionIds: [], archiveSession: async () => {} }
     registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
     const tool = getTool(ctx.registered, 'create_session')
     const result = await tool.execute({ workspace_id: 'ws-1' }, execFor('session-current'))
-    expect(result.cwd).toBe('/ws-workspace')
+    expect(result.cwd).toBe(WS_ROOT)
     expect(attached).toHaveLength(1)
     expect(attached[0]).toBe(result.session_id)
+  })
+
+  it('create_session workspace_id 与显式 cwd 不一致时报错且不创建会话', async () => {
+    const ctx = makeCtx()
+    const child = join(WS_ROOT, 'project')
+    await mkdir(child, { recursive: true })
+    const workspace = { id: 'ws-1', path: WS_ROOT, attachSession: async () => {} }
+    const registry = { get: (id: string) => (id === 'ws-1' ? workspace : undefined), list: () => [workspace], archivedSessionIds: [], archiveSession: async () => {} }
+    registerSessionTools(ctx as any, noSandbox(), makeDeps(new SwitchIntent(), () => registry as any))
+    const tool = getTool(ctx.registered, 'create_session')
+    await expect(tool.execute({ workspace_id: 'ws-1', cwd: child }, execFor('session-current'))).rejects.toThrow('cwd does not match workspace')
+    expect(ctx.createOptions).toHaveLength(0)
   })
 
   it('create_session workspace_id 不存在时抛 workspace-not-found', async () => {

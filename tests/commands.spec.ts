@@ -1,7 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { registerSessionCommands } from '../src/commands.js'
 import { SwitchIntent } from '../src/switch.js'
 import type { ToolDeps } from '../src/value.js'
+
+/** 真实工作区目录：归属校验走 realpath，必须用真实存在的目录（macOS 的 tmpdir 需先 realpath 归一）。 */
+let WS_ROOT = ''
+beforeAll(async () => {
+  WS_ROOT = await realpath(await mkdtemp(join(tmpdir(), 'dsh-tool-session-cmd-')))
+})
+afterAll(async () => {
+  await rm(WS_ROOT, { recursive: true, force: true })
+})
 
 interface CommandDef {
   name: string
@@ -195,24 +207,26 @@ describe('registerSessionCommands', () => {
   it('归属 path===cwd 的工作区', async () => {
     const { ctx, registered } = makeCtx()
     const attached: string[] = []
-    const workspace = { path: '/ws', attachSession: async (id: string) => { attached.push(id) } }
+    const workspace = { path: WS_ROOT, attachSession: async (id: string) => { attached.push(id) } }
     const registry = { list: () => [workspace], archivedSessionIds: [], archiveSession: async () => {} }
     registerSessionCommands(ctx, makeDeps(new SwitchIntent(), () => registry as any))
-    await getCmd(registered, 'clear').handler(invocation())
+    await getCmd(registered, 'clear').handler(invocation({ agent: { session: { header: { id: 'session-current', cwd: WS_ROOT, agentPreset: 'code' } } } }))
     expect(attached).toHaveLength(1)
     expect(attached[0]).toMatch(/^session-/)
   })
 
-  it('当前会话 cwd 是工作区子目录时仍归属祖先工作区', async () => {
-    const { ctx, registered } = makeCtx()
-    const attached: string[] = []
-    const workspace = { path: '/ws', attachSession: async (id: string) => { attached.push(id) } }
+  it('当前会话 cwd 未注册为工作区时返回错误且不创建会话', async () => {
+    const { ctx, registered, createOptions } = makeCtx()
+    const child = join(WS_ROOT, 'project')
+    await mkdir(child, { recursive: true })
+    const workspace = { path: WS_ROOT, attachSession: async () => {} }
     const registry = { list: () => [workspace], archivedSessionIds: [], archiveSession: async () => {} }
     registerSessionCommands(ctx, makeDeps(new SwitchIntent(), () => registry as any))
-    const nested = invocation({ agent: { session: { header: { id: 'session-current', cwd: '/ws/project', agentPreset: 'code' } } } })
-    await getCmd(registered, 'clear').handler(nested)
-    expect(attached).toHaveLength(1)
-    expect(attached[0]).toMatch(/^session-/)
+    const nested = invocation({ agent: { session: { header: { id: 'session-current', cwd: child, agentPreset: 'code' } } } })
+    const result = await getCmd(registered, 'clear').handler(nested)
+    expect(result.kind).toBe('error')
+    expect(result.text).toContain('cwd is not a registered workspace')
+    expect(createOptions).toHaveLength(0)
   })
 
   it('信号已中止时返回取消错误且不创建会话', async () => {

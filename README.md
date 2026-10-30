@@ -32,7 +32,7 @@ DeepSeek Harness 会话管理工具插件：为**模型（agent）**提供会话
 - `archive_session` 归档属破坏性操作，除沙箱提权外另经 `approval.request` 独立用户审批：无审批服务、无 agent、被拒/取消均不归档（fail-closed）。
 - 会话操作本身经 host 服务（`ctx.agents` / `ctx.sessionTitle` / `ctx.workspaceRegistry` / `ctx.agentDefaultModel`）完成，不直接碰会话持久化文件。
 - `create_session` 通过 `agentOptions` 声明默认模型的 seed 路由（provider/model/reasoningEffort）；model selection 的后续切换由 host-apiproxy 的 `session.selectModel` / `session.models` 端点惰性安装的动态 ref 接管，故会话中途切换模型可即时生效。推理强度必须在 `agentOptions` 里给出：agent-loop 的 step preparation 会固定请求配置，之后再在 `agent/request` 里补 `reasoningEffort` 会抛 "after step preparation fixed" 错误，首轮消息直接失败。缺省模型服务时 fail-closed 拒绝创建。
-- `create_session` 创建后调用 `workspace.attachSession()` 将新会话归属到工作区：显式 `workspace_id` 优先，否则默认匹配 cwd 本身或 cwd 祖先目录对应的工作区（取最具体的一个）；cwd 不在任何工作区目录之下时不归属，会话落在侧边栏默认折叠的「未分组」分组。
+- `create_session` 创建后调用 `workspace.attachSession()` 将新会话归属到工作区，并对 cwd 做 **fail-closed 校验**：cwd 经 realpath 归一后必须精确等于一个已注册工作区路径（DSH 的 `attachSession` 只接受 `cwd === 工作区 path`，子目录一律拒绝）；显式 `workspace_id` 时还要求 cwd 与该工作区路径一致。不满足时**直接报错、不创建会话**，错误信息给出最接近的工作区路径，提示调用方改用已注册路径或先 `create_workspace` 注册该目录。
 
 ## 自动归档扫描（可选，默认关闭）
 
@@ -123,12 +123,12 @@ npm test           # vitest 单元测试
 3. `switch_session`（或 `create_session` + `switch:true`）执行后，UI 侧边栏当前会话切换为目标会话。
 4. `archive_session` 归档后 `~/.dsh/sessions` 下文件仍在（`archivedSessionIds` 更新）。
 5. `create_session` 带 `initial_message` 参数创建后，新会话立即以该消息作为首轮用户消息开始对话（`followup` 注入并唤醒 driver）。
-6. `create_session` 创建后新会话归属到工作区（显式 `workspace_id`，或默认匹配 cwd 本身 / cwd 祖先目录的工作区），UI 侧边栏该工作区分组下可见；cwd 与所有工作区都无关时会话进入「未分组」分组（默认折叠，需手动展开）。
+6. `create_session` 仅在 cwd（realpath 归一后）等于已注册工作区路径时创建并归属；cwd 为工作区子目录或未注册目录时直接报错、不产生会话，错误信息给出最接近的工作区路径。显式 `workspace_id` 时 cwd 必须与该项路径一致。
 7. `get_current_session` 返回当前会话的 id/cwd/title/workspace 归属。
 8. `get_session` 按 session_id 返回单个会话详情（含 running/archived/workspace 归属）。
 9. 会话工具调用在对话流中显示专属视图：各自图标 + 中文标题 + 摘要，可点击展开参数/结果（不再统一显示 generic "Tool call"）。
 10. 在会话输入框输入 `/` 后，命令菜单出现 `/clear` 与 `/new`；输入 `/clear`（或 `/new`）回车后，不经模型直接创建新会话并切换过去（旧会话保留、含一条 command 生命周期记录）。
-11. 新会话继承当前会话的工作目录与 agent preset，归属相同工作区，UI 侧边栏出现并切换到新会话。
+11. 新会话继承当前会话的工作目录与 agent preset，归属相同工作区，UI 侧边栏出现并切换到新会话；当前会话 cwd 不是已注册工作区时命令返回错误文本、不创建会话。
 12. `list_sessions` 传 `query` 关键字后仅返回标题 / 会话 id / 工作目录 / 工作区标题命中该关键字的会话（大小写不敏感，`query` 与 `workspace_id` / `include_archived` 可叠加过滤）。
 13. 目标会话尚未进入客户端列表时切换不会丢：`/clear`（或 `switch_session`）后 UI 仍会切过去（client 端在 4s 窗口内等会话进列表后重试落地）；若会话始终未出现，浏览器 Console 出现 `tool-session: switch intent dropped, session never listed: ...` 告警，而不是静默无反应。
 14. 网络抖动导致 SSE 断开重连（以及页面刷新、新开标签）后，UI 停留在用户当前所在的会话，不会被拽回上一次 `/clear` 或 `switch_session` 的会话；而客户端断线期间产生的切换意图仍会在重连后补投落地。

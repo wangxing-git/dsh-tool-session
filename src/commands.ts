@@ -18,7 +18,7 @@ import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands
 // 引入 declaration merging：SessionProjectionMap 的 `agentPreset` 条目由 registry 包声明。
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import { createSession } from './create-session.js'
-import { workspaceForCwd, type ToolDeps } from './value.js'
+import { resolveCreateTarget, type CreateTarget, type ToolDeps } from './value.js'
 
 /** /clear、/new 的 no-arguments 用法提示（对齐 /compact 语义）。 */
 const USAGE = 'Usage: /clear (no arguments)'
@@ -40,7 +40,8 @@ function resolveSessionPreset(session: Session, deps: ToolDeps): string | undefi
 
 /**
  * 执行一次「新建会话并切换」：继承当前会话的 cwd 与 agent preset，
- * 创建新会话、归属 cwd 本身或其祖先目录对应的工作区，并请求 UI 切换到新会话。
+ * 创建新会话并归属 cwd 对应的工作区（cwd 必须是已注册工作区，否则返回错误），
+ * 最后请求 UI 切换到新会话。
  */
 async function executeNewSession(ctx: Context, deps: ToolDeps, invocation: CommandInvocation): Promise<CommandResult> {
   if (invocation.rawInput.trim().length > 0) {
@@ -50,19 +51,24 @@ async function executeNewSession(ctx: Context, deps: ToolDeps, invocation: Comma
     return { kind: 'error', text: 'New session cancelled.' }
   }
   const session = invocation.agent.session
-  const cwd = session.header.cwd
-  if (cwd === undefined) {
+  if (session.header.cwd === undefined) {
     return { kind: 'error', text: 'Cannot start a new session: the current session has no working directory.' }
   }
   try {
     // 继承当前会话「实际运行」的 preset（agentPreset 投影已含创建后的选择事件），
     // rosterless 部署时为 undefined，新会话保持不挂 preset。
     const presetId = resolveSessionPreset(session, deps)
-    const registry = deps.workspaceRegistry()
-    const workspace = registry === undefined ? undefined : workspaceForCwd(registry.list(), cwd)
+    // 与 create_session 共用同一目标解析：cwd 必须是已注册工作区（fail-closed），
+    // 未注册时把原因作为命令错误文本呈现，而不是创建出「未分组」的会话。
+    let target: CreateTarget
+    try {
+      target = await resolveCreateTarget({}, { agent: invocation.agent }, deps)
+    } catch (error) {
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
+    }
     const { sessionId } = await createSession(ctx, deps, {
-      cwd,
-      workspace,
+      cwd: target.cwd,
+      ...(target.workspace !== undefined ? { workspace: target.workspace } : {}),
       ...(presetId !== undefined ? { presetId } : {}),
       switch: true,
     })
